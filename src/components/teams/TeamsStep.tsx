@@ -38,6 +38,8 @@ export function TeamsStep({ armador }: { armador: Armador }) {
     levelOf,
     movePlayer,
     updateTeam,
+    teamPresets,
+    resetTeamPresets,
     setStep,
   } = armador;
 
@@ -223,6 +225,19 @@ export function TeamsStep({ armador }: { armador: Armador }) {
               {manual
                 ? "Arrastrá desde “Sin asignar” a cada equipo (o tocá y elegí destino)."
                 : "Arrastrá un jugador (o tocalo y elegí destino) para ajustar."}
+            </span>
+            <span className="w-full text-[11px] text-grass-100/40">
+              Tocá el nombre de un equipo para cambiarlo. Queda guardado para las
+              próximas fechas.
+              {teamPresets.length > 0 && (
+                <button
+                  type="button"
+                  onClick={resetTeamPresets}
+                  className="ml-2 rounded-lg px-2 py-0.5 text-grass-100/40 underline underline-offset-2 transition hover:text-rose-300"
+                >
+                  Volver a los nombres por defecto
+                </button>
+              )}
             </span>
           </div>
 

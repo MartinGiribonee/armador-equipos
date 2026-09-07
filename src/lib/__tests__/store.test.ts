@@ -549,3 +549,114 @@ describe("store — limpiar", () => {
     expect(store.getSnapshot().match!.teams.map((t) => t.players.length)).toEqual(teams);
   });
 });
+
+describe("store — nombres de equipo", () => {
+  let store: Store;
+
+  beforeEach(async () => {
+    store = await freshStore();
+    seed(store);
+    store.setSetup({ teamCount: 2, formatId: "5v5", mode: "auto" });
+    store.generate();
+  });
+
+  const teamNames = () => store.getSnapshot().match!.teams.map((t) => t.name);
+
+  it("arranca con los nombres por defecto", () => {
+    expect(teamNames()).toEqual(["Rojos", "Azules"]);
+  });
+
+  it("renombrar un equipo lo guarda como identidad durable", () => {
+    const teamId = store.getSnapshot().match!.teams[0].id;
+    store.updateTeam(teamId, { name: "Los Pibes" });
+
+    expect(teamNames()[0]).toBe("Los Pibes");
+    expect(store.getSnapshot().teamPresets[0].name).toBe("Los Pibes");
+  });
+
+  it("el nombre sobrevive a cerrar el partido y armar el siguiente", () => {
+    const match = store.getSnapshot().match!;
+    store.updateTeam(match.teams[0].id, { name: "Los Pibes" });
+    store.updateTeam(match.teams[1].id, { name: "Los Viejos" });
+
+    // Se juega la fecha: el partido se cierra.
+    store.saveResult({
+      goals: { [match.teams[0].id]: 4, [match.teams[1].id]: 2 },
+    });
+    expect(store.getSnapshot().match).toBeNull();
+
+    store.generate();
+
+    expect(teamNames()).toEqual(["Los Pibes", "Los Viejos"]);
+  });
+
+  it("los colores también quedan guardados", () => {
+    const teamId = store.getSnapshot().match!.teams[0].id;
+    store.updateTeam(teamId, { primaryColor: "#123456", secondaryColor: "#abcdef" });
+
+    store.resetMatch();
+    store.generate();
+
+    expect(store.getSnapshot().match!.teams[0]).toMatchObject({
+      primaryColor: "#123456",
+      secondaryColor: "#abcdef",
+    });
+  });
+
+  it("sobrevive al recargar la app", async () => {
+    store.updateTeam(store.getSnapshot().match!.teams[0].id, { name: "Los Pibes" });
+
+    vi.resetModules();
+    const reloaded = await import("../store");
+
+    expect(reloaded.getSnapshot().teamPresets[0].name).toBe("Los Pibes");
+    expect(reloaded.getSnapshot().match!.teams[0].name).toBe("Los Pibes");
+  });
+
+  it("renombrar el segundo equipo no pisa al primero", () => {
+    const match = store.getSnapshot().match!;
+    store.updateTeam(match.teams[1].id, { name: "Los Viejos" });
+
+    expect(store.getSnapshot().teamPresets[0].name).toBe("Rojos");
+    expect(store.getSnapshot().teamPresets[1].name).toBe("Los Viejos");
+  });
+
+  it("los nombres se mantienen al armar los equipos a mano", () => {
+    store.updateTeam(store.getSnapshot().match!.teams[0].id, { name: "Los Pibes" });
+
+    store.setSetup({ teamCount: 2, formatId: "5v5", mode: "manual" });
+    store.createEmptyTeams();
+
+    expect(teamNames()[0]).toBe("Los Pibes");
+  });
+
+  it("cambiar la formación no toca la identidad del equipo", () => {
+    const teamId = store.getSnapshot().match!.teams[0].id;
+    store.updateTeam(teamId, { name: "Los Pibes" });
+
+    store.setFormation(teamId, "1-2-1");
+
+    expect(store.getSnapshot().teamPresets[0]).toMatchObject({ name: "Los Pibes" });
+    expect(store.getSnapshot().teamPresets[0]).not.toHaveProperty("formation");
+  });
+
+  it("se puede volver a los nombres por defecto", () => {
+    const match = store.getSnapshot().match!;
+    store.updateTeam(match.teams[0].id, { name: "Los Pibes" });
+    store.updateTeam(match.teams[1].id, { name: "Los Viejos" });
+
+    store.resetTeamPresets();
+
+    expect(store.getSnapshot().teamPresets).toEqual([]);
+    expect(teamNames()).toEqual(["Rojos", "Azules"]);
+  });
+
+  it("con más equipos, los que no se tocaron usan el default", () => {
+    store.updateTeam(store.getSnapshot().match!.teams[0].id, { name: "Los Pibes" });
+
+    store.setSetup({ teamCount: 3, formatId: "libre", mode: "auto" });
+    store.generate();
+
+    expect(teamNames()).toEqual(["Los Pibes", "Azules", "Blancos"]);
+  });
+});

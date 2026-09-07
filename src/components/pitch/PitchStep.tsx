@@ -130,6 +130,12 @@ export function PitchStep({ armador }: { armador: Armador }) {
 
       {/* ── Cancha + controles ── */}
       <div className="card flex flex-col gap-3 p-3">
+        <TeamNameField
+          key={team.id}
+          name={team.name}
+          onRename={(name) => updateTeam(team.id, { name })}
+        />
+
         <div className="flex flex-wrap items-center justify-between gap-2">
           <label className="flex items-center gap-2 text-xs font-semibold text-grass-100/70">
             Formación
@@ -334,5 +340,44 @@ export function PitchStep({ armador }: { armador: Armador }) {
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Campo para renombrar el equipo desde la cancha. El `key={team.id}` de arriba
+ * lo remonta al cambiar de pestaña, así el borrador nunca queda con el nombre
+ * del equipo anterior.
+ */
+function TeamNameField({
+  name,
+  onRename,
+}: {
+  name: string;
+  onRename: (name: string) => void;
+}) {
+  const [draft, setDraft] = useState(name);
+
+  return (
+    <label className="flex items-center gap-2">
+      <span className="shrink-0 text-xs font-semibold text-grass-100/70">Nombre</span>
+      <input
+        className="field min-w-0 flex-1 px-2.5 py-1.5 text-sm font-black tracking-wide uppercase"
+        value={draft}
+        maxLength={30}
+        aria-label="Nombre del equipo"
+        placeholder="Nombre del equipo"
+        onChange={(e) => setDraft(e.target.value)}
+        onFocus={(e) => e.currentTarget.select()}
+        onBlur={() => {
+          const clean = draft.trim();
+          if (clean && clean !== name) onRename(clean);
+          else setDraft(name);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+          if (e.key === "Escape") setDraft(name);
+        }}
+      />
+    </label>
   );
 }

@@ -22,6 +22,7 @@ const SQUAD_KEY = "armador:squad:v1";
 const MATCH_KEY = "armador:match:v1";
 const SETUP_KEY = "armador:setup:v1";
 const RESULTS_KEY = "armador:results:v1";
+const TEAMS_KEY = "armador:teams:v1";
 
 /** Cómo se arman los equipos: repartiendo con el algoritmo o a dedo. */
 export type BuildMode = "auto" | "manual";
@@ -210,4 +211,38 @@ export function loadResults(): MatchResult[] {
 
 export function saveResults(results: readonly MatchResult[]): void {
   write(RESULTS_KEY, results);
+}
+
+/**
+ * Identidad durable de cada equipo: el nombre y los colores con los que el
+ * grupo los conoce ("Los Pibes", "Los Viejos"). Vive aparte del partido porque
+ * sobrevive a todas las fechas — el `Team` dentro de un `Match` es la
+ * encarnación de esa identidad en un domingo puntual.
+ */
+export interface TeamPreset {
+  name: string;
+  primaryColor: string;
+  secondaryColor: string;
+}
+
+function parsePreset(value: unknown): TeamPreset | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Record<string, unknown>;
+  if (typeof raw.name !== "string" || !raw.name.trim()) return null;
+  return {
+    name: raw.name.slice(0, 30),
+    primaryColor: typeof raw.primaryColor === "string" ? raw.primaryColor : "#dc2626",
+    secondaryColor:
+      typeof raw.secondaryColor === "string" ? raw.secondaryColor : "#ffffff",
+  };
+}
+
+export function loadTeamPresets(): TeamPreset[] {
+  const raw = read<unknown[]>(TEAMS_KEY);
+  if (!Array.isArray(raw)) return [];
+  return raw.map(parsePreset).filter((p): p is TeamPreset => p !== null);
+}
+
+export function saveTeamPresets(presets: readonly TeamPreset[]): void {
+  write(TEAMS_KEY, presets);
 }

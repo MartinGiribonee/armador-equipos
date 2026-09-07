@@ -69,21 +69,34 @@ export function TeamColumn({
               className="size-4 shrink-0 rounded-full border border-white/25"
               style={{ backgroundColor: primaryColor }}
             />
-            <input
-              className="min-w-0 flex-1 rounded-md bg-transparent px-1 py-0.5 text-sm font-black tracking-wide uppercase text-grass-50 hover:bg-white/5 focus:bg-white/10 focus:outline-none"
-              value={draft}
-              aria-label="Nombre del equipo"
-              onChange={(e) => setDraft(e.target.value)}
-              onBlur={() => {
-                const clean = draft.trim();
-                if (clean && clean !== name) onRename?.(clean);
-                else setDraft(name);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") e.currentTarget.blur();
-                if (e.key === "Escape") setDraft(name);
-              }}
-            />
+            {/* Se ve como un campo editable a propósito: antes parecía texto
+                plano y nadie descubría que se le podía cambiar el nombre. */}
+            <div className="group relative min-w-0 flex-1">
+              <input
+                className="w-full rounded-lg border border-white/10 bg-white/5 py-1 pr-7 pl-2 text-sm font-black tracking-wide uppercase text-grass-50 transition hover:border-grass-400/50 focus:border-grass-400 focus:bg-white/10 focus:outline-none"
+                value={draft}
+                maxLength={30}
+                aria-label="Nombre del equipo"
+                placeholder="Nombre"
+                onChange={(e) => setDraft(e.target.value)}
+                onFocus={(e) => e.currentTarget.select()}
+                onBlur={() => {
+                  const clean = draft.trim();
+                  if (clean && clean !== name) onRename?.(clean);
+                  else setDraft(name);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
+                  if (e.key === "Escape") setDraft(name);
+                }}
+              />
+              <span
+                aria-hidden
+                className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-[11px] text-grass-100/30 transition group-focus-within:opacity-0"
+              >
+                ✏️
+              </span>
+            </div>
           </>
         ) : (
           <h3 className="flex-1 text-sm font-black tracking-wide uppercase text-grass-100/70">

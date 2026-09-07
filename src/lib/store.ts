@@ -9,11 +9,14 @@ import {
   loadResults,
   loadSetup,
   loadSquad,
+  loadTeamPresets,
   saveMatch,
   saveResults,
   saveSetup,
   saveSquad,
+  saveTeamPresets,
   type MatchSetup,
+  type TeamPreset,
 } from "./storage";
 import {
   MATCH_FORMATS,
@@ -45,6 +48,8 @@ export interface ArmadorState {
   match: Match | null;
   bench: Player[];
   step: Step;
+  /** Nombres y colores con los que el grupo conoce a cada equipo. */
+  teamPresets: TeamPreset[];
   /** Historial de partidos jugados: el insumo del rating. */
   results: MatchResult[];
   /**
@@ -61,6 +66,7 @@ const EMPTY: ArmadorState = {
   match: null,
   bench: [],
   step: 1,
+  teamPresets: [],
   results: [],
   ratings: new Map(),
 };
@@ -76,6 +82,7 @@ function hydrate(): ArmadorState {
     bench: stored?.bench ?? [],
     // Si había un partido armado, arrancamos donde el usuario lo dejó.
     step: stored ? 2 : 1,
+    teamPresets: loadTeamPresets(),
     results,
     ratings: computeRatings(squad, results),
   };
@@ -111,6 +118,7 @@ function commit(next: ArmadorState): void {
   if (next.squad !== previous.squad) saveSquad(next.squad);
   if (next.setup !== previous.setup) saveSetup(next.setup);
   if (next.results !== previous.results) saveResults(next.results);
+  if (next.teamPresets !== previous.teamPresets) saveTeamPresets(next.teamPresets);
   if (next.match !== previous.match || next.bench !== previous.bench) {
     saveMatch(next.match ? { match: next.match, bench: next.bench } : null);
   }
@@ -169,6 +177,22 @@ function normalizeTeam(team: Team): Team {
 
   if (formation === team.formation && layout === team.layout) return team;
   return { ...team, formation, layout };
+}
+
+/**
+ * Identidad del equipo en la posición `index`: lo que el usuario haya puesto,
+ * o el nombre y kit por defecto. Es la fuente de verdad de nombres y colores,
+ * y por eso sobrevive a cerrar un partido y armar el siguiente.
+ */
+function presetFor(index: number): TeamPreset {
+  const saved = state.teamPresets[index];
+  if (saved) return saved;
+  const kit = kitFor(index);
+  return {
+    name: teamNameFor(index),
+    primaryColor: kit.primaryColor,
+    secondaryColor: kit.secondaryColor,
+  };
 }
 
 /** Aplica una transformación al plantel y la replica en los equipos ya armados. */
@@ -271,14 +295,10 @@ export function generate(): void {
   });
 
   const teams: Team[] = result.teams.map((players, index) => {
-    // Si el usuario ya renombró o recoloreó un equipo, se le respeta.
-    const kept = match?.teams[index];
-    const kit = kitFor(index);
+    const preset = presetFor(index);
     return {
-      id: kept?.id ?? createId("t"),
-      name: kept?.name ?? teamNameFor(index),
-      primaryColor: kept?.primaryColor ?? kit.primaryColor,
-      secondaryColor: kept?.secondaryColor ?? kit.secondaryColor,
+      id: match?.teams[index]?.id ?? createId("t"),
+      ...preset,
       players,
       formation: defaultFormation(players.length),
     };
@@ -302,18 +322,12 @@ export function generate(): void {
 export function createEmptyTeams(): void {
   const { squad, setup, match } = state;
 
-  const teams: Team[] = Array.from({ length: setup.teamCount }, (_, index) => {
-    const kept = match?.teams[index];
-    const kit = kitFor(index);
-    return {
-      id: kept?.id ?? createId("t"),
-      name: kept?.name ?? teamNameFor(index),
-      primaryColor: kept?.primaryColor ?? kit.primaryColor,
-      secondaryColor: kept?.secondaryColor ?? kit.secondaryColor,
-      players: [],
-      formation: defaultFormation(0),
-    };
-  });
+  const teams: Team[] = Array.from({ length: setup.teamCount }, (_, index) => ({
+    id: match?.teams[index]?.id ?? createId("t"),
+    ...presetFor(index),
+    players: [],
+    formation: defaultFormation(0),
+  }));
 
   update({
     match: {
@@ -487,10 +501,55 @@ export function deleteResult(resultId: string): void {
 
 export function updateTeam(teamId: string, patch: Partial<Omit<Team, "id">>): void {
   if (!state.match) return;
+
+  const index = state.match.teams.findIndex((t) => t.id === teamId);
+  if (index === -1) return;
+
+  const teams = state.match.teams.map((t) => (t.id === teamId ? { ...t, ...patch } : t));
+
+  /*
+   * El nombre y los colores son identidad del equipo, no del partido: si el
+   * usuario los cambia se guardan aparte para que la semana que viene el
+   * equipo se siga llamando igual. La formación y el layout no, porque
+   * dependen de quién juega ese día.
+   */
+  let teamPresets = state.teamPresets;
+  const touchesIdentity =
+    patch.name !== undefined ||
+    patch.primaryColor !== undefined ||
+    patch.secondaryColor !== undefined;
+
+  if (touchesIdentity) {
+    const team = teams[index];
+    teamPresets = state.teamPresets.slice();
+    // Rellena los huecos si se renombró el equipo 3 sin haber tocado el 1 y el 2.
+    for (let i = 0; i <= index; i++) {
+      teamPresets[i] ??= presetFor(i);
+    }
+    teamPresets[index] = {
+      name: team.name,
+      primaryColor: team.primaryColor,
+      secondaryColor: team.secondaryColor,
+    };
+  }
+
+  update({ match: { ...state.match, teams }, teamPresets });
+}
+
+/** Vuelve a los nombres y colores por defecto ("Rojos", "Azules", …). */
+export function resetTeamPresets(): void {
+  const teams = state.match?.teams.map((team, index) => {
+    const kit = kitFor(index);
+    return {
+      ...team,
+      name: teamNameFor(index),
+      primaryColor: kit.primaryColor,
+      secondaryColor: kit.secondaryColor,
+    };
+  });
+
   update({
-    match: {
-      ...state.match,
-      teams: state.match.teams.map((t) => (t.id === teamId ? { ...t, ...patch } : t)),
-    },
+    teamPresets: [],
+    match: state.match && teams ? { ...state.match, teams } : state.match,
   });
 }

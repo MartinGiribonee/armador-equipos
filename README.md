@@ -34,7 +34,10 @@ Cuatro pasos, pensados para hacerse desde el celular:
      y los repartís vos.
 
    En los dos casos podés arrastrar jugadores de un equipo a otro, soltarlos
-   encima de otro para intercambiarlos, o mandarlos al banco.
+   encima de otro para intercambiarlos, o mandarlos al banco. El nombre y los
+   colores de cada equipo se editan ahí mismo y **quedan guardados para las
+   próximas fechas** (`TeamPreset` en `storage.ts`): son identidad del grupo,
+   no del partido.
 3. **Cancha** — cada equipo en su cancha con formación y colores de camiseta
    editables. Podés **arrastrar las camisetas** para ubicar a cada uno donde
    quieras, más allá de la formación; "Volver a la formación" descarta esos
@@ -135,7 +138,7 @@ src/
     store.ts            estado + acciones (fuera de React)
     storage.ts          lectura/escritura de localStorage
     share.ts            texto plano, link de WhatsApp, descarga del PNG
-    __tests__/          88 tests, incluida una simulación de 50 fechas
+    __tests__/          103 tests, incluida una simulación de 50 fechas
                         que verifica que el rating converge
 ```
 
