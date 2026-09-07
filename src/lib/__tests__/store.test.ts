@@ -478,3 +478,74 @@ describe("store — resultados y aprendizaje", () => {
     expect(store.saveResult({ goals: {} })).toBeNull();
   });
 });
+
+describe("store — limpiar", () => {
+  let store: Store;
+
+  beforeEach(async () => {
+    store = await freshStore();
+    seed(store);
+    store.setSetup({ teamCount: 2, formatId: "5v5", mode: "auto" });
+    store.generate();
+    const match = store.getSnapshot().match!;
+    store.saveResult({
+      goals: { [match.teams[0].id]: 5, [match.teams[1].id]: 2 },
+    });
+    store.generate();
+  });
+
+  it("vaciar el plantel se lleva también el historial", () => {
+    expect(store.getSnapshot().results).toHaveLength(1);
+
+    store.clearSquad();
+
+    expect(store.getSnapshot()).toMatchObject({
+      squad: [],
+      match: null,
+      bench: [],
+      results: [],
+      step: 1,
+    });
+    expect(store.getSnapshot().ratings.size).toBe(0);
+  });
+
+  it("se puede vaciar el plantel conservando el historial", () => {
+    store.clearSquad({ keepHistory: true });
+
+    expect(store.getSnapshot().squad).toEqual([]);
+    expect(store.getSnapshot().results).toHaveLength(1);
+  });
+
+  it("el plantel vaciado no vuelve al recargar la app", async () => {
+    store.clearSquad();
+    vi.resetModules();
+    const reloaded = await import("../store");
+
+    expect(reloaded.getSnapshot().squad).toEqual([]);
+    expect(reloaded.getSnapshot().results).toEqual([]);
+    expect(reloaded.getSnapshot().match).toBeNull();
+    expect(reloaded.getSnapshot().step).toBe(1);
+  });
+
+  it("borrar solo el historial deja el plantel y los niveles cargados a mano", () => {
+    const antes = store.getSnapshot().squad.length;
+    const jugador = store.getSnapshot().squad.find((p) => p.level === 5)!;
+
+    store.clearHistory();
+
+    expect(store.getSnapshot().squad).toHaveLength(antes);
+    expect(store.getSnapshot().results).toEqual([]);
+    // Vuelve a valer el nivel cargado a mano, sin aprendizaje encima.
+    expect(store.levelOf(jugador)).toBe(5);
+    expect(store.getSnapshot().ratings.get(jugador.id)!.matches).toBe(0);
+  });
+
+  it("borrar el historial no deshace los equipos ya armados", () => {
+    const teams = store.getSnapshot().match!.teams.map((t) => t.players.length);
+
+    store.clearHistory();
+
+    expect(store.getSnapshot().match).not.toBeNull();
+    expect(store.getSnapshot().match!.teams.map((t) => t.players.length)).toEqual(teams);
+  });
+});

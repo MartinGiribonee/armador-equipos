@@ -49,6 +49,7 @@ export function useArmador() {
     updatePlayer: store.updatePlayer,
     removePlayer: store.removePlayer,
     clearSquad: store.clearSquad,
+    clearHistory: store.clearHistory,
     generate: store.generate,
     createEmptyTeams: store.createEmptyTeams,
     resetMatch: store.resetMatch,

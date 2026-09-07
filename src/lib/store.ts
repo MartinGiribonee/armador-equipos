@@ -225,8 +225,31 @@ export function removePlayer(id: string): void {
   transformEverywhere((players) => players.filter((p) => p.id !== id));
 }
 
-export function clearSquad(): void {
-  update({ squad: [], match: null, bench: [], step: 1 });
+/**
+ * Vacía el plantel.
+ *
+ * Por defecto se lleva también el historial, y no es un capricho: al volver a
+ * cargar a la misma gente se le generan ids nuevos, así que las fechas viejas
+ * quedarían apuntando a jugadores que ya no existen — peso muerto en el
+ * storage que nunca vuelve a servir para nada. `keepHistory` existe para el
+ * caso raro de querer conservarlas igual.
+ */
+export function clearSquad(options: { keepHistory?: boolean } = {}): void {
+  update({
+    squad: [],
+    match: null,
+    bench: [],
+    step: 1,
+    results: options.keepHistory ? state.results : [],
+  });
+}
+
+/**
+ * Borra el historial de partidos sin tocar el plantel: los niveles vuelven a
+ * ser los cargados a mano y el aprendizaje arranca de cero.
+ */
+export function clearHistory(): void {
+  update({ results: [], match: state.match, bench: state.bench });
 }
 
 /** Nivel que ve el balanceador: el aprendido del historial. */
