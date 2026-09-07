@@ -1,9 +1,10 @@
 "use client";
 
+import { useRef, useState } from "react";
 import { Jersey } from "@/components/pitch/Jersey";
 import { assignToSpots, spotsForTeam } from "@/lib/formations";
 import { shortName, sortByLine } from "@/lib/players";
-import type { Player, Team } from "@/lib/types";
+import type { PitchSpot, Player, Team } from "@/lib/types";
 
 /**
  * Números de camiseta: 1 al arquero y el resto en orden de línea (defensa,
@@ -15,13 +16,36 @@ function shirtNumbers(players: readonly Player[]): Map<string, number> {
   return numbers;
 }
 
-/**
- * Coordenadas de la formación (0-100, arco propio abajo) → porcentajes CSS,
- * con margen para que las camisetas no queden pisando la línea de fondo.
+/*
+ * Mapeo entre las coordenadas de la cancha (0-100, arco propio abajo) y los
+ * porcentajes CSS. El margen evita que las camisetas queden pisando la línea
+ * de fondo, y hay que aplicarlo en los dos sentidos: al dibujar y al leer
+ * dónde soltó el dedo.
  */
-function toStyle(x: number, y: number) {
-  return { left: `${6 + x * 0.88}%`, top: `${93 - y * 0.86}%` };
+const PAD_X = 6;
+const SCALE_X = 0.88;
+const PAD_Y = 93;
+const SCALE_Y = 0.86;
+
+function toStyle({ x, y }: PitchSpot) {
+  return { left: `${PAD_X + x * SCALE_X}%`, top: `${PAD_Y - y * SCALE_Y}%` };
 }
+
+function fromClient(
+  clientX: number,
+  clientY: number,
+  rect: DOMRect,
+): PitchSpot {
+  const leftPct = ((clientX - rect.left) / rect.width) * 100;
+  const topPct = ((clientY - rect.top) / rect.height) * 100;
+  return {
+    x: Math.min(100, Math.max(0, (leftPct - PAD_X) / SCALE_X)),
+    y: Math.min(100, Math.max(0, (PAD_Y - topPct) / SCALE_Y)),
+  };
+}
+
+/** Umbral en px para distinguir un toque (abre el editor) de un arrastre. */
+const DRAG_THRESHOLD = 6;
 
 interface PitchProps {
   team: Team;
@@ -29,6 +53,8 @@ interface PitchProps {
   selectedPlayerId?: string | null;
   /** En modo exportación se ocultan los estados de hover/foco. */
   interactive?: boolean;
+  /** Habilita arrastrar camisetas para ubicarlas donde uno quiera. */
+  onMovePlayer?: (playerId: string, spot: PitchSpot) => void;
 }
 
 export function Pitch({
@@ -36,30 +62,106 @@ export function Pitch({
   onSelectPlayer,
   selectedPlayerId,
   interactive = true,
+  onMovePlayer,
 }: PitchProps) {
+  const fieldRef = useRef<HTMLDivElement>(null);
+  /** Posición en vivo mientras se arrastra, para no escribir al store en cada píxel. */
+  const [dragging, setDragging] = useState<{ id: string; spot: PitchSpot } | null>(null);
+  const gesture = useRef<{ moved: boolean; startX: number; startY: number } | null>(null);
+
   const spots = spotsForTeam(team.formation, team.players.length);
   const slots = assignToSpots(team.players, spots);
   const numbers = shirtNumbers(team.players);
+  const canDrag = interactive && onMovePlayer !== undefined;
+
+  const handlePointerDown = (event: React.PointerEvent) => {
+    if (!canDrag) return;
+    gesture.current = {
+      moved: false,
+      startX: event.clientX,
+      startY: event.clientY,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handlePointerMove = (event: React.PointerEvent, playerId: string) => {
+    const start = gesture.current;
+    const rect = fieldRef.current?.getBoundingClientRect();
+    if (!start || !rect) return;
+
+    if (!start.moved) {
+      const dx = event.clientX - start.startX;
+      const dy = event.clientY - start.startY;
+      if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+      start.moved = true;
+    }
+
+    setDragging({ id: playerId, spot: fromClient(event.clientX, event.clientY, rect) });
+  };
+
+  const handlePointerUp = (event: React.PointerEvent, playerId: string) => {
+    const start = gesture.current;
+    gesture.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    const rect = fieldRef.current?.getBoundingClientRect();
+    if (start?.moved && rect && onMovePlayer) {
+      onMovePlayer(playerId, fromClient(event.clientX, event.clientY, rect));
+    }
+    setDragging(null);
+
+    // Sin desplazamiento fue un toque: abre la ficha del jugador.
+    if (start && !start.moved) {
+      const player = team.players.find((p) => p.id === playerId);
+      if (player) onSelectPlayer?.(player);
+    }
+  };
 
   return (
-    <div className="pitch-turf relative aspect-[68/105] w-full overflow-hidden rounded-2xl">
+    <div
+      ref={fieldRef}
+      className="pitch-turf relative aspect-[68/105] w-full overflow-hidden rounded-2xl"
+    >
       <PitchMarkings />
 
       {slots.map(({ spot, player }) => {
         if (!player) return null;
         const selected = selectedPlayerId === player.id;
+        const isDragging = dragging?.id === player.id;
+        // Prioridad: lo que se está arrastrando ahora > ubicación manual
+        // guardada > el hueco que le da la formación.
+        const at = isDragging
+          ? dragging.spot
+          : (team.layout?.[player.id] ?? { x: spot.x, y: spot.y });
 
         return (
           <button
             key={player.id}
             type="button"
             disabled={!interactive}
-            onClick={() => onSelectPlayer?.(player)}
+            onPointerDown={handlePointerDown}
+            onPointerMove={(e) => handlePointerMove(e, player.id)}
+            onPointerUp={(e) => handlePointerUp(e, player.id)}
+            onPointerCancel={() => {
+              gesture.current = null;
+              setDragging(null);
+            }}
+            // Sin arrastre habilitado el click normal sigue abriendo la ficha.
+            onClick={canDrag ? undefined : () => onSelectPlayer?.(player)}
             aria-label={`${player.name} — ${player.position}, nivel ${player.level}`}
-            style={toStyle(spot.x, spot.y)}
+            style={{
+              ...toStyle(at),
+              // El que se arrastra va arriba de todos y sin transición, para
+              // que siga al dedo sin ir "atrasado".
+              zIndex: isDragging ? 20 : selected ? 10 : undefined,
+            }}
             className={[
               "absolute flex w-[19%] max-w-[86px] min-w-[44px] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5",
-              interactive ? "cursor-pointer transition hover:scale-110" : "",
+              interactive ? "cursor-pointer" : "",
+              canDrag ? "touch-none" : "",
+              isDragging ? "scale-110" : "transition hover:scale-110",
             ].join(" ")}
           >
             <Jersey

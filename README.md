@@ -27,11 +27,18 @@ Tres pasos, pensados para hacerse desde el celular:
 1. **Plantel** — pegás los nombres (acepta el copy-paste crudo de WhatsApp, con
    numeración y viñetas) y le ponés a cada uno nivel 1-5 y puesto. Arrancan
    todos en nivel 3 y mediocampistas. El plantel queda guardado para la próxima.
-2. **Equipos** — elegís cuántos equipos y qué formato (5v5 … 11v11 o libre) y
-   generás. Podés regenerar, arrastrar jugadores de un equipo a otro, soltarlos
-   encima de otro para intercambiarlos, o mandarlos al banco de suplentes.
+2. **Equipos** — elegís cuántos equipos y qué formato (5v5 … 11v11 o libre), y
+   después el **modo de armado**:
+   - *Automático*: el algoritmo reparte. Podés regenerar las veces que quieras.
+   - *Manual*: se crean los equipos vacíos con todo el plantel en "Sin asignar"
+     y los repartís vos.
+
+   En los dos casos podés arrastrar jugadores de un equipo a otro, soltarlos
+   encima de otro para intercambiarlos, o mandarlos al banco.
 3. **Cancha** — cada equipo en su cancha con formación y colores de camiseta
-   editables. De ahí sale el PNG de la alineación, el PNG con las listas, el
+   editables. Podés **arrastrar las camisetas** para ubicar a cada uno donde
+   quieras, más allá de la formación; "Volver a la formación" descarta esos
+   ajustes. De ahí sale el PNG de la alineación, el PNG con las listas, el
    texto plano y el link de WhatsApp.
 
 ## Cómo reparte
@@ -51,6 +58,18 @@ Tres pasos, pensados para hacerse desde el celular:
 
 Es una función pura: con la misma `seed` da el mismo reparto. "Regenerar" es
 simplemente correrla con otra semilla.
+
+En modo manual el algoritmo no corre: se crean los equipos vacíos y el reparto
+sale de los movimientos del usuario.
+
+## Ubicaciones en la cancha
+
+Cada equipo se dibuja por formación, pero `Team.layout` guarda las posiciones
+puestas a mano (`{ x, y }` en el mismo sistema 0-100 de las formaciones) y
+esas pisan al hueco que tocaba. Las ubicaciones se descartan solas cuando
+dejan de tener sentido: si el jugador se va del equipo, si se lo borra del
+plantel, o si se cambia de formación — sin eso, elegir otra formación no
+mostraría ningún cambio.
 
 ## Estructura
 
@@ -73,7 +92,7 @@ src/
     store.ts            estado + acciones (fuera de React)
     storage.ts          lectura/escritura de localStorage
     share.ts            texto plano, link de WhatsApp, descarga del PNG
-    __tests__/          43 tests: algoritmo, parseo y store
+    __tests__/          57 tests: algoritmo, parseo y store
 ```
 
 El estado vive en `src/lib/store.ts`, fuera de React, y se consume con

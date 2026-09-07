@@ -35,6 +35,15 @@ export interface Kit {
   secondaryColor: string;
 }
 
+/**
+ * Punto en la cancha, en el mismo sistema que las formaciones:
+ * x = 0 (izquierda) … 100 (derecha), y = 0 (arco propio) … 100 (arco rival).
+ */
+export interface PitchSpot {
+  x: number;
+  y: number;
+}
+
 export interface Team {
   id: string;
   name: string;
@@ -43,6 +52,11 @@ export interface Team {
   players: Player[];
   /** Formación en notación clásica, ej. "4-3-3" o "2-3-1". */
   formation: string;
+  /**
+   * Ubicaciones puestas a mano, por id de jugador. Pisan a la formación: si un
+   * jugador no figura acá, se lo dibuja en el hueco que le toca por formación.
+   */
+  layout?: Record<string, PitchSpot>;
 }
 
 export interface Match {

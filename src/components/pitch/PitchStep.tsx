@@ -23,7 +23,16 @@ import type { Player } from "@/lib/types";
 type Toast = { text: string; tone: "ok" | "error" } | null;
 
 export function PitchStep({ armador }: { armador: Armador }) {
-  const { match, bench, updateTeam, updatePlayer, setStep } = armador;
+  const {
+    match,
+    bench,
+    updateTeam,
+    updatePlayer,
+    setFormation,
+    setPlayerSpot,
+    resetLayout,
+    setStep,
+  } = armador;
   const [activeIndex, setActiveIndex] = useState(0);
   const [editing, setEditing] = useState<Player | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -83,6 +92,7 @@ export function PitchStep({ armador }: { armador: Armador }) {
 
   const team = match.teams[Math.min(activeIndex, match.teams.length - 1)];
   const formations = formationsFor(team.players.length);
+  const hasCustomLayout = Object.keys(team.layout ?? {}).length > 0;
   const text = matchToText(match, bench);
 
   return (
@@ -125,7 +135,7 @@ export function PitchStep({ armador }: { armador: Armador }) {
             <select
               className="field px-2 py-1.5 text-sm font-bold"
               value={team.formation}
-              onChange={(e) => updateTeam(team.id, { formation: e.target.value })}
+              onChange={(e) => setFormation(team.id, e.target.value)}
             >
               {formations.length === 0 && (
                 <option value={team.formation}>{team.formation} (libre)</option>
@@ -139,6 +149,19 @@ export function PitchStep({ armador }: { armador: Armador }) {
           </label>
           <KitPicker team={team} onChange={(patch) => updateTeam(team.id, patch)} />
         </div>
+
+        <p className="flex flex-wrap items-center justify-between gap-2 px-1 text-[11px] text-grass-100/40">
+          <span>Arrastrá las camisetas para ubicarlas donde quieras.</span>
+          {hasCustomLayout && (
+            <button
+              type="button"
+              onClick={() => resetLayout(team.id)}
+              className="rounded-lg bg-white/5 px-2 py-1 font-semibold text-grass-200 transition hover:bg-white/10"
+            >
+              ↺ Volver a la formación
+            </button>
+          )}
+        </p>
 
         {/* Nodo que se exporta como PNG: cancha + encabezado del equipo. */}
         <div ref={pitchRef} className="rounded-2xl bg-night-900 p-3">
@@ -157,6 +180,7 @@ export function PitchStep({ armador }: { armador: Armador }) {
             onSelectPlayer={(player) =>
               setEditing((current) => (current?.id === player.id ? null : player))
             }
+            onMovePlayer={(playerId, spot) => setPlayerSpot(team.id, playerId, spot)}
           />
           <p className="mt-2 px-1 text-right text-[10px] text-grass-100/30 capitalize">
             {formatDate(match.date)}

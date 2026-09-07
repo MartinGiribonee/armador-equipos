@@ -84,7 +84,7 @@ describe("store — generar y ajustar a mano", () => {
   beforeEach(async () => {
     store = await freshStore();
     seed(store);
-    store.setSetup({ teamCount: 2, formatId: "5v5" });
+    store.setSetup({ teamCount: 2, formatId: "5v5", mode: "auto" });
     store.generate();
   });
 
@@ -198,5 +198,169 @@ describe("store — generar y ajustar a mano", () => {
     expect(reloaded.getSnapshot().match).not.toBeNull();
     expect(reloaded.getSnapshot().match!.teams).toHaveLength(2);
     expect(reloaded.getSnapshot().step).toBe(2);
+  });
+
+  it("los jugadores que se suman después van al banco", () => {
+    store.addNames("Tarde");
+
+    const agregado = store.getSnapshot().bench.find((p) => p.name === "Tarde");
+    expect(agregado).toBeDefined();
+    // Y siguen estando en el plantel, no se duplican.
+    expect(store.getSnapshot().squad.filter((p) => p.name === "Tarde")).toHaveLength(1);
+  });
+});
+
+describe("store — armado manual", () => {
+  let store: Store;
+  beforeEach(async () => {
+    store = await freshStore();
+    seed(store);
+    store.setSetup({ teamCount: 2, formatId: "5v5", mode: "manual" });
+  });
+
+  it("crea equipos vacíos con todo el plantel sin asignar", () => {
+    store.createEmptyTeams();
+
+    const { match, bench } = store.getSnapshot();
+    expect(match!.teams).toHaveLength(2);
+    expect(match!.teams[0].players).toHaveLength(0);
+    expect(match!.teams[1].players).toHaveLength(0);
+    expect(bench).toHaveLength(10);
+  });
+
+  it("permite repartir a dedo desde el banco", () => {
+    store.createEmptyTeams();
+    const [a, b, c] = store.getSnapshot().bench;
+    const teamId = store.getSnapshot().match!.teams[0].id;
+
+    store.movePlayer(a.id, teamId);
+    store.movePlayer(b.id, teamId);
+    store.movePlayer(c.id, teamId);
+
+    expect(store.getSnapshot().match!.teams[0].players.map((p) => p.id)).toEqual([
+      a.id,
+      b.id,
+      c.id,
+    ]);
+    expect(store.getSnapshot().bench).toHaveLength(7);
+  });
+
+  it("vaciar equipos conserva nombres y colores puestos a mano", () => {
+    store.createEmptyTeams();
+    const teamId = store.getSnapshot().match!.teams[0].id;
+    store.updateTeam(teamId, { name: "Los Pibes", primaryColor: "#123456" });
+    store.movePlayer(store.getSnapshot().bench[0].id, teamId);
+
+    store.createEmptyTeams();
+
+    const team = store.getSnapshot().match!.teams[0];
+    expect(team.name).toBe("Los Pibes");
+    expect(team.primaryColor).toBe("#123456");
+    expect(team.players).toHaveLength(0);
+    expect(store.getSnapshot().bench).toHaveLength(10);
+  });
+
+  it("cambiar a automático y generar reparte sobre los mismos equipos", () => {
+    store.createEmptyTeams();
+    const idsAntes = store.getSnapshot().match!.teams.map((t) => t.id);
+
+    store.setSetup({ teamCount: 2, formatId: "5v5", mode: "auto" });
+    store.generate();
+
+    expect(store.getSnapshot().match!.teams.map((t) => t.id)).toEqual(idsAntes);
+    expect(store.getSnapshot().match!.teams[0].players).toHaveLength(5);
+  });
+});
+
+describe("store — ubicación manual en la cancha", () => {
+  let store: Store;
+  let teamId: string;
+  let playerId: string;
+
+  beforeEach(async () => {
+    store = await freshStore();
+    seed(store);
+    store.setSetup({ teamCount: 2, formatId: "5v5", mode: "auto" });
+    store.generate();
+    const team = store.getSnapshot().match!.teams[0];
+    teamId = team.id;
+    playerId = team.players[0].id;
+  });
+
+  const layoutOf = (id = teamId) =>
+    store.getSnapshot().match!.teams.find((t) => t.id === id)!.layout;
+
+  it("guarda la posición de un jugador", () => {
+    store.setPlayerSpot(teamId, playerId, { x: 30, y: 70 });
+
+    expect(layoutOf()).toEqual({ [playerId]: { x: 30, y: 70 } });
+  });
+
+  it("recorta las coordenadas al campo de juego", () => {
+    store.setPlayerSpot(teamId, playerId, { x: -40, y: 180 });
+
+    expect(layoutOf()![playerId]).toEqual({ x: 0, y: 100 });
+  });
+
+  it("acumula varias posiciones sin pisar las anteriores", () => {
+    const otro = store.getSnapshot().match!.teams[0].players[1].id;
+    store.setPlayerSpot(teamId, playerId, { x: 10, y: 10 });
+    store.setPlayerSpot(teamId, otro, { x: 90, y: 90 });
+
+    expect(Object.keys(layoutOf()!)).toHaveLength(2);
+  });
+
+  it("resetLayout devuelve el equipo a la formación", () => {
+    store.setPlayerSpot(teamId, playerId, { x: 30, y: 70 });
+    store.resetLayout(teamId);
+
+    expect(layoutOf()).toBeUndefined();
+  });
+
+  it("cambiar de formación descarta las posiciones manuales", () => {
+    store.setPlayerSpot(teamId, playerId, { x: 30, y: 70 });
+    store.setFormation(teamId, "1-2-1");
+
+    expect(layoutOf()).toBeUndefined();
+    expect(store.getSnapshot().match!.teams[0].formation).toBe("1-2-1");
+  });
+
+  it("un jugador que se va del equipo pierde su posición", () => {
+    const otro = store.getSnapshot().match!.teams[0].players[1].id;
+    store.setPlayerSpot(teamId, playerId, { x: 30, y: 70 });
+    store.setPlayerSpot(teamId, otro, { x: 60, y: 40 });
+
+    store.movePlayer(playerId, store.getSnapshot().match!.teams[1].id);
+
+    expect(layoutOf()).toEqual({ [otro]: { x: 60, y: 40 } });
+  });
+
+  it("borrar a un jugador limpia su posición", () => {
+    store.setPlayerSpot(teamId, playerId, { x: 30, y: 70 });
+    store.removePlayer(playerId);
+
+    expect(layoutOf()).toBeUndefined();
+  });
+
+  it("las posiciones sobreviven al recargar la app", async () => {
+    store.setPlayerSpot(teamId, playerId, { x: 30, y: 70 });
+    vi.resetModules();
+    const reloaded = await import("../store");
+
+    const team = reloaded.getSnapshot().match!.teams.find((t) => t.id === teamId)!;
+    expect(team.layout).toEqual({ [playerId]: { x: 30, y: 70 } });
+  });
+
+  it("descarta del storage coordenadas corruptas", async () => {
+    store.setPlayerSpot(teamId, playerId, { x: 30, y: 70 });
+
+    const key = "armador:match:v1";
+    const stored = JSON.parse(window.localStorage.getItem(key)!);
+    stored.match.teams[0].layout = { [playerId]: { x: 999, y: "arriba" } };
+    window.localStorage.setItem(key, JSON.stringify(stored));
+
+    vi.resetModules();
+    const reloaded = await import("../store");
+    expect(reloaded.getSnapshot().match!.teams[0].layout).toBeUndefined();
   });
 });

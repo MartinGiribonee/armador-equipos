@@ -14,9 +14,15 @@ import { PlayerChipGhost, type ChipData } from "@/components/teams/PlayerChip";
 import { TeamColumn } from "@/components/teams/TeamColumn";
 import { BENCH_ID, type Armador } from "@/hooks/useArmador";
 import { teamTotal } from "@/lib/balance";
+import type { BuildMode } from "@/lib/storage";
 import { MATCH_FORMATS, type Player } from "@/lib/types";
 
 const TEAM_COUNTS = [2, 3, 4, 5, 6];
+
+const MODES: Array<{ id: BuildMode; label: string; hint: string }> = [
+  { id: "auto", label: "⚽ Automático", hint: "reparte por nivel y puesto" },
+  { id: "manual", label: "✋ Manual", hint: "los elegís vos" },
+];
 
 export function TeamsStep({ armador }: { armador: Armador }) {
   const {
@@ -27,6 +33,7 @@ export function TeamsStep({ armador }: { armador: Armador }) {
     bench,
     canGenerate,
     generate,
+    createEmptyTeams,
     resetMatch,
     movePlayer,
     updateTeam,
@@ -41,6 +48,7 @@ export function TeamsStep({ armador }: { armador: Armador }) {
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
   );
 
+  const manual = setup.mode === "manual";
   const format = MATCH_FORMATS.find((f) => f.id === setup.formatId);
   const capacity = format?.perTeam ?? null;
   const everyone: Player[] = useMemo(
@@ -123,20 +131,65 @@ export function TeamsStep({ armador }: { armador: Armador }) {
           </label>
         </div>
 
+        {/* Cómo se reparte: con el algoritmo o a dedo. */}
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs font-semibold text-grass-100/70">Armado</span>
+          <div
+            role="radiogroup"
+            aria-label="Modo de armado"
+            className="grid grid-cols-2 gap-1 rounded-xl bg-white/5 p-1"
+          >
+            {MODES.map((option) => {
+              const active = setup.mode === option.id;
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => setSetup({ ...setup, mode: option.id })}
+                  className={[
+                    "rounded-lg px-3 py-2 text-xs font-bold transition",
+                    active
+                      ? "bg-grass-500 text-grass-950"
+                      : "text-grass-100/60 hover:bg-white/5 hover:text-grass-100",
+                  ].join(" ")}
+                >
+                  {option.label}
+                  <span className="block text-[10px] font-medium opacity-70">
+                    {option.hint}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-grass-100/60">
           <span>
             {squad.length} en el plantel
             {capacity ? ` · hacen falta ${needed}` : " · reparto libre"}
             {shortBy > 0 ? ` · faltan ${shortBy}` : ""}
           </span>
-          <button
-            type="button"
-            onClick={generate}
-            disabled={!canGenerate}
-            className="rounded-xl bg-grass-500 px-4 py-2 text-sm font-bold text-grass-950 transition hover:bg-grass-400 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-grass-100/30"
-          >
-            {match ? "🔄 Regenerar" : "⚽ Generar equipos"}
-          </button>
+          {manual ? (
+            <button
+              type="button"
+              onClick={createEmptyTeams}
+              disabled={squad.length === 0}
+              className="rounded-xl bg-grass-500 px-4 py-2 text-sm font-bold text-grass-950 transition hover:bg-grass-400 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-grass-100/30"
+            >
+              {match ? "🧹 Vaciar equipos" : "✋ Crear equipos vacíos"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={generate}
+              disabled={!canGenerate}
+              className="rounded-xl bg-grass-500 px-4 py-2 text-sm font-bold text-grass-950 transition hover:bg-grass-400 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-grass-100/30"
+            >
+              {match ? "🔄 Regenerar" : "⚽ Generar equipos"}
+            </button>
+          )}
         </div>
       </div>
 
@@ -146,11 +199,14 @@ export function TeamsStep({ armador }: { armador: Armador }) {
             🎽
           </span>
           <p className="text-sm font-semibold text-grass-100">
-            Elegí cuántos equipos y tocá &ldquo;Generar&rdquo;
+            {manual
+              ? "Elegí cuántos equipos y creá la estructura vacía"
+              : "Elegí cuántos equipos y tocá “Generar”"}
           </p>
           <p className="max-w-xs text-xs text-grass-100/50">
-            Se reparten por puesto y nivel: cada equipo arranca con un arquero y una
-            mezcla pareja del resto.
+            {manual
+              ? "Te quedan todos los jugadores sin asignar y los vas metiendo en cada equipo arrastrándolos o tocándolos."
+              : "Se reparten por puesto y nivel: cada equipo arranca con un arquero y una mezcla pareja del resto."}
           </p>
         </div>
       ) : (
@@ -158,14 +214,14 @@ export function TeamsStep({ armador }: { armador: Armador }) {
           <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs">
             <span className="text-grass-100/60">
               Diferencia de nivel entre el más fuerte y el más débil:{" "}
-              <strong
-                className={spread <= 2 ? "text-grass-300" : "text-amber-300"}
-              >
+              <strong className={spread <= 2 ? "text-grass-300" : "text-amber-300"}>
                 {spread} punto{spread === 1 ? "" : "s"}
               </strong>
             </span>
             <span className="text-grass-100/40">
-              Arrastrá un jugador (o tocalo y elegí destino) para ajustar.
+              {manual
+                ? "Arrastrá desde “Sin asignar” a cada equipo (o tocá y elegí destino)."
+                : "Arrastrá un jugador (o tocalo y elegí destino) para ajustar."}
             </span>
           </div>
 
@@ -199,10 +255,10 @@ export function TeamsStep({ armador }: { armador: Armador }) {
                 />
               ))}
 
-              {(bench.length > 0 || selectedId !== null) && (
+              {(manual || bench.length > 0 || selectedId !== null) && (
                 <TeamColumn
                   id={BENCH_ID}
-                  name="Suplentes"
+                  name={manual ? "Sin asignar" : "Suplentes"}
                   players={bench}
                   selectedPlayerId={selectedId}
                   onSelectPlayer={(id) =>

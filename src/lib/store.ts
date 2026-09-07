@@ -12,7 +12,13 @@ import {
   saveSquad,
   type MatchSetup,
 } from "./storage";
-import { MATCH_FORMATS, type Match, type Player, type Team } from "./types";
+import {
+  MATCH_FORMATS,
+  type Match,
+  type PitchSpot,
+  type Player,
+  type Team,
+} from "./types";
 
 /**
  * Store del armador.
@@ -109,13 +115,33 @@ function randomSeed(): number {
 }
 
 /**
- * Ajusta la formación si dejó de coincidir con la cantidad de jugadores
- * (pasa al mover gente a mano después de generar).
+ * Deja al equipo consistente después de cualquier cambio de plantilla:
+ *
+ * - ajusta la formación si dejó de coincidir con la cantidad de jugadores;
+ * - descarta las ubicaciones manuales de jugadores que ya no están en el
+ *   equipo, para que al volver más tarde no reaparezcan en la cancha.
  */
-function fitFormation(team: Team): Team {
+function normalizeTeam(team: Team): Team {
   const current = getFormation(team.formation);
-  if (current && current.size === team.players.length) return team;
-  return { ...team, formation: defaultFormation(team.players.length) };
+  const formation =
+    current && current.size === team.players.length
+      ? team.formation
+      : defaultFormation(team.players.length);
+
+  let layout = team.layout;
+  if (layout) {
+    const ids = new Set(team.players.map((p) => p.id));
+    const entries = Object.entries(layout);
+    const kept = entries.filter(([id]) => ids.has(id));
+    // Solo se arma un objeto nuevo si realmente sobraba alguien, para no
+    // romper la identidad y disparar renders de más.
+    if (kept.length !== entries.length) {
+      layout = kept.length === 0 ? undefined : Object.fromEntries(kept);
+    }
+  }
+
+  if (formation === team.formation && layout === team.layout) return team;
+  return { ...team, formation, layout };
 }
 
 /** Aplica una transformación al plantel y la replica en los equipos ya armados. */
@@ -127,7 +153,7 @@ function transformEverywhere(transform: (players: Player[]) => Player[]): void {
       ? {
           ...state.match,
           teams: state.match.teams.map((team) =>
-            fitFormation({ ...team, players: transform(team.players) }),
+            normalizeTeam({ ...team, players: transform(team.players) }),
           ),
         }
       : null,
@@ -151,7 +177,14 @@ export function addNames(text: string): number {
     state.squad.map((p) => p.name),
   );
   if (names.length === 0) return 0;
-  update({ squad: [...state.squad, ...names.map((name) => createPlayer(name))] });
+
+  const nuevos = names.map((name) => createPlayer(name));
+  update({
+    squad: [...state.squad, ...nuevos],
+    // Con un partido ya armado, los que se suman van al banco: si no, quedarían
+    // en el plantel pero invisibles en la pantalla de equipos.
+    bench: state.match ? [...state.bench, ...nuevos] : state.bench,
+  });
   return names.length;
 }
 
@@ -204,6 +237,37 @@ export function generate(): void {
   });
 }
 
+/**
+ * Arma la estructura de equipos vacíos y manda a todo el plantel al banco,
+ * para repartir a dedo. Conserva nombres y colores si ya había equipos.
+ */
+export function createEmptyTeams(): void {
+  const { squad, setup, match } = state;
+
+  const teams: Team[] = Array.from({ length: setup.teamCount }, (_, index) => {
+    const kept = match?.teams[index];
+    const kit = kitFor(index);
+    return {
+      id: kept?.id ?? createId("t"),
+      name: kept?.name ?? teamNameFor(index),
+      primaryColor: kept?.primaryColor ?? kit.primaryColor,
+      secondaryColor: kept?.secondaryColor ?? kit.secondaryColor,
+      players: [],
+      formation: defaultFormation(0),
+    };
+  });
+
+  update({
+    match: {
+      id: match?.id ?? createId("m"),
+      date: match?.date ?? todayIso(),
+      format: setup.formatId,
+      teams,
+    },
+    bench: squad,
+  });
+}
+
 export function resetMatch(): void {
   update({ match: null, bench: [], step: 1 });
 }
@@ -240,7 +304,7 @@ export function movePlayer(
     const players = without(team.players);
     if (team.id === targetId) players.push(player);
     if (partner && team.id === sourceId) players.push(partner);
-    return fitFormation({ ...team, players });
+    return normalizeTeam({ ...team, players });
   });
 
   let nextBench = without(bench);
@@ -248,6 +312,59 @@ export function movePlayer(
   if (partner && sourceId === BENCH_ID) nextBench = [...nextBench, partner];
 
   update({ match: { ...match, teams }, bench: nextBench });
+}
+
+/**
+ * Ubica a un jugador en un punto exacto de la cancha, pisando el hueco que le
+ * daba la formación. Las coordenadas van en el sistema 0-100 de `PitchSpot`.
+ */
+export function setPlayerSpot(teamId: string, playerId: string, spot: PitchSpot): void {
+  if (!state.match) return;
+
+  const clamped: PitchSpot = {
+    x: Math.min(100, Math.max(0, spot.x)),
+    y: Math.min(100, Math.max(0, spot.y)),
+  };
+
+  update({
+    match: {
+      ...state.match,
+      teams: state.match.teams.map((team) =>
+        team.id === teamId
+          ? { ...team, layout: { ...team.layout, [playerId]: clamped } }
+          : team,
+      ),
+    },
+  });
+}
+
+/** Descarta las ubicaciones manuales: el equipo vuelve a pararse por formación. */
+export function resetLayout(teamId: string): void {
+  if (!state.match) return;
+  update({
+    match: {
+      ...state.match,
+      teams: state.match.teams.map((team) =>
+        team.id === teamId ? { ...team, layout: undefined } : team,
+      ),
+    },
+  });
+}
+
+/**
+ * Cambia la formación. Borra las ubicaciones manuales a propósito: si no, el
+ * usuario elegiría otra formación y no vería ningún cambio en la cancha.
+ */
+export function setFormation(teamId: string, formation: string): void {
+  if (!state.match) return;
+  update({
+    match: {
+      ...state.match,
+      teams: state.match.teams.map((team) =>
+        team.id === teamId ? { ...team, formation, layout: undefined } : team,
+      ),
+    },
+  });
 }
 
 export function updateTeam(teamId: string, patch: Partial<Omit<Team, "id">>): void {

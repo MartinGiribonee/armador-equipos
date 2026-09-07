@@ -1,5 +1,12 @@
 import { clampLevel } from "./players";
-import { MATCH_FORMATS, POSITIONS, type Match, type Player, type Position } from "./types";
+import {
+  MATCH_FORMATS,
+  POSITIONS,
+  type Match,
+  type PitchSpot,
+  type Player,
+  type Position,
+} from "./types";
 
 /**
  * Persistencia local del MVP.
@@ -14,12 +21,20 @@ const SQUAD_KEY = "armador:squad:v1";
 const MATCH_KEY = "armador:match:v1";
 const SETUP_KEY = "armador:setup:v1";
 
+/** Cómo se arman los equipos: repartiendo con el algoritmo o a dedo. */
+export type BuildMode = "auto" | "manual";
+
 export interface MatchSetup {
   teamCount: number;
   formatId: string;
+  mode: BuildMode;
 }
 
-export const DEFAULT_SETUP: MatchSetup = { teamCount: 2, formatId: "7v7" };
+export const DEFAULT_SETUP: MatchSetup = {
+  teamCount: 2,
+  formatId: "7v7",
+  mode: "auto",
+};
 
 function read<T>(key: string): T | null {
   if (typeof window === "undefined") return null;
@@ -78,6 +93,25 @@ export interface StoredMatch {
   bench: Player[];
 }
 
+/**
+ * Valida las ubicaciones manuales de la cancha. Se descartan las coordenadas
+ * fuera de rango o no numéricas: el jugador vuelve a su hueco de formación en
+ * vez de dibujarse afuera del campo.
+ */
+function parseLayout(value: unknown): Record<string, PitchSpot> | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const out: Record<string, PitchSpot> = {};
+  for (const [id, spot] of Object.entries(value as Record<string, unknown>)) {
+    if (!spot || typeof spot !== "object") continue;
+    const { x, y } = spot as Record<string, unknown>;
+    if (typeof x !== "number" || typeof y !== "number") continue;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    if (x < 0 || x > 100 || y < 0 || y > 100) continue;
+    out[id] = { x, y };
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 export function loadMatch(): StoredMatch | null {
   const raw = read<Partial<StoredMatch>>(MATCH_KEY);
   const match = raw?.match;
@@ -90,6 +124,7 @@ export function loadMatch(): StoredMatch | null {
         players: (team.players ?? [])
           .map(parsePlayer)
           .filter((p): p is Player => p !== null),
+        layout: parseLayout(team.layout),
       })),
     },
     bench: (raw?.bench ?? []).map(parsePlayer).filter((p): p is Player => p !== null),
@@ -117,6 +152,7 @@ export function loadSetup(): MatchSetup {
   return {
     teamCount: Math.min(6, Math.max(2, Math.round(Number(raw.teamCount) || 2))),
     formatId: known ? raw.formatId : DEFAULT_SETUP.formatId,
+    mode: raw.mode === "manual" ? "manual" : "auto",
   };
 }
 

@@ -48,9 +48,13 @@ export function useArmador() {
     removePlayer: store.removePlayer,
     clearSquad: store.clearSquad,
     generate: store.generate,
+    createEmptyTeams: store.createEmptyTeams,
     resetMatch: store.resetMatch,
     movePlayer: store.movePlayer,
     updateTeam: store.updateTeam,
+    setFormation: store.setFormation,
+    setPlayerSpot: store.setPlayerSpot,
+    resetLayout: store.resetLayout,
   };
 }
 
