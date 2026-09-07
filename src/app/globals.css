@@ -1,0 +1,108 @@
+@import "tailwindcss";
+
+/*
+ * Paleta "cancha": verdes de césped para el fondo y la superficie de juego,
+ * blanco tiza para las líneas, y una lima eléctrica como color de acción.
+ * Fondo oscuro fijo (no seguimos el tema del sistema): la app se mira casi
+ * siempre de noche o al costado de la cancha, y el contraste con el verde
+ * y las camisetas es mejor así.
+ */
+@theme {
+  --color-grass-50: #f0fdf4;
+  --color-grass-100: #dcfce7;
+  --color-grass-300: #86efac;
+  --color-grass-400: #4ade80;
+  --color-grass-500: #22c55e;
+  --color-grass-600: #16a34a;
+  --color-grass-700: #15803d;
+  --color-grass-800: #166534;
+  --color-grass-900: #14532d;
+  --color-grass-950: #052e16;
+
+  --color-pitch: #1a7a3f;
+  --color-pitch-dark: #146333;
+  --color-chalk: rgba(255, 255, 255, 0.65);
+
+  --color-night-800: #17251c;
+  --color-night-900: #0f1a13;
+  --color-night-950: #0a120d;
+
+  --font-sans:
+    var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    sans-serif;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background-color: var(--color-night-950);
+  color: var(--color-grass-50);
+  font-family: var(--font-sans);
+  /* Evita el rebote de scroll horizontal en mobile con la cancha ancha. */
+  overflow-x: hidden;
+}
+
+/* Un tramado sutil de césped cortado, solo en el fondo general. */
+.grass-backdrop {
+  background-image:
+    radial-gradient(
+      ellipse 80% 60% at 50% -10%,
+      rgba(34, 197, 94, 0.18),
+      transparent 70%
+    ),
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.012) 0 28px,
+      transparent 28px 56px
+    );
+}
+
+/* Superficie de la cancha con franjas de corte horizontales. */
+.pitch-turf {
+  background-color: var(--color-pitch);
+  background-image: repeating-linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.055) 0 10%,
+    rgba(0, 0, 0, 0.045) 10% 20%
+  );
+}
+
+/* Tarjetas: vidrio oscuro con un borde verde tenue. */
+.card {
+  background-color: rgb(23 37 28 / 0.72);
+  border: 1px solid rgb(34 197 94 / 0.16);
+  border-radius: 1rem;
+  backdrop-filter: blur(6px);
+}
+
+/* El input de nivel y los selects nativos, con estética propia. */
+select.field,
+input.field,
+textarea.field {
+  background-color: rgb(10 18 13 / 0.8);
+  border: 1px solid rgb(34 197 94 / 0.22);
+  color: var(--color-grass-50);
+  border-radius: 0.625rem;
+}
+
+select.field:focus,
+input.field:focus,
+textarea.field:focus {
+  outline: 2px solid var(--color-grass-400);
+  outline-offset: 1px;
+}
+
+/* Mientras se arrastra un jugador no queremos que el navegador seleccione texto. */
+.dragging,
+.dragging * {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+@media print {
+  body {
+    background: white;
+  }
+}
