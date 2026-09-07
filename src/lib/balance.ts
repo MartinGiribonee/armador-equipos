@@ -20,8 +20,19 @@ export const MAX_REFINEMENT_ITERATIONS = 20;
  */
 const DRAFT_ORDER: Position[] = ["DEF", "MED", "DEL", "POR"];
 
+/**
+ * Cómo leer el nivel de un jugador. Por defecto es el 1-5 cargado a mano, pero
+ * el store le pasa el nivel aprendido del historial, que es continuo. La lógica
+ * de abajo no asume enteros, así que funciona igual con decimales.
+ */
+export type LevelOf = (player: Player) => number;
+
+const byOwnLevel: LevelOf = (player) => player.level;
+
 export interface BalanceOptions {
   teamCount: number;
+  /** Nivel a usar para balancear. Por defecto, `player.level`. */
+  levelOf?: LevelOf;
   /** Jugadores por equipo. `null` = libre (se reparten todos parejo). */
   perTeam?: number | null;
   /** Semilla del azar: misma semilla ⇒ mismo reparto. */
@@ -64,18 +75,25 @@ function shuffle<T>(items: readonly T[], rng: () => number): T[] {
  * Ordena por nivel de mayor a menor, barajando antes para que los empates
  * (mismo nivel) queden en distinto orden en cada regeneración.
  */
-function byLevelDesc(players: readonly Player[], rng: () => number): Player[] {
-  return shuffle(players, rng).sort((a, b) => b.level - a.level);
+function byLevelDesc(
+  players: readonly Player[],
+  rng: () => number,
+  levelOf: LevelOf,
+): Player[] {
+  return shuffle(players, rng).sort((a, b) => levelOf(b) - levelOf(a));
 }
 
 /** Suma de niveles de un equipo. */
-export function teamTotal(players: readonly Player[]): number {
-  return players.reduce((sum, p) => sum + p.level, 0);
+export function teamTotal(players: readonly Player[], levelOf: LevelOf = byOwnLevel): number {
+  return players.reduce((sum, p) => sum + levelOf(p), 0);
 }
 
 /** Nivel promedio de un equipo (0 si está vacío). */
-export function teamAverage(players: readonly Player[]): number {
-  return players.length === 0 ? 0 : teamTotal(players) / players.length;
+export function teamAverage(
+  players: readonly Player[],
+  levelOf: LevelOf = byOwnLevel,
+): number {
+  return players.length === 0 ? 0 : teamTotal(players, levelOf) / players.length;
 }
 
 /** Cantidad de jugadores por posición dentro de un equipo. */
@@ -117,6 +135,7 @@ export function balanceTeams(
   const threshold = options.threshold ?? DEFAULT_THRESHOLD;
   const maxIterations = options.maxIterations ?? MAX_REFINEMENT_ITERATIONS;
   const rng = createRng(options.seed ?? 1);
+  const levelOf = options.levelOf ?? byOwnLevel;
 
   const teams: Player[][] = Array.from({ length: teamCount }, () => []);
   const bench: Player[] = [];
@@ -134,7 +153,7 @@ export function balanceTeams(
 
   // ── 2. Un arquero por equipo antes que nada ──────────────────────────────
   // (spec §5.3: "que quede al menos un arquero por equipo si hay arqueros").
-  const keepers = byLevelDesc(byPosition.POR, rng);
+  const keepers = byLevelDesc(byPosition.POR, rng, levelOf);
   const assignedKeepers = new Set<string>();
   for (let slot = 0; slot < order.length && slot < keepers.length; slot++) {
     const teamIndex = order[slot];
@@ -169,7 +188,7 @@ export function balanceTeams(
   };
 
   for (const position of DRAFT_ORDER) {
-    for (const player of byLevelDesc(byPosition[position], rng)) {
+    for (const player of byLevelDesc(byPosition[position], rng, levelOf)) {
       const teamIndex = pickTeam();
       if (teamIndex === null) bench.push(player);
       else teams[teamIndex].push(player);
@@ -177,14 +196,14 @@ export function balanceTeams(
   }
 
   // ── 4. Pasada de ajuste por intercambios ─────────────────────────────────
-  const swaps = refine(teams, threshold, maxIterations);
+  const swaps = refine(teams, threshold, maxIterations, levelOf);
 
-  return { teams, bench, spread: currentSpread(teams), swaps };
+  return { teams, bench, spread: currentSpread(teams, levelOf), swaps };
 }
 
-function currentSpread(teams: readonly Player[][]): number {
+function currentSpread(teams: readonly Player[][], levelOf: LevelOf): number {
   if (teams.length === 0) return 0;
-  const totals = teams.map(teamTotal);
+  const totals = teams.map((team) => teamTotal(team, levelOf));
   return Math.max(...totals) - Math.min(...totals);
 }
 
@@ -194,12 +213,17 @@ function currentSpread(teams: readonly Player[][]): number {
  * Al ser siempre misma posición por misma posición, el reparto por líneas que
  * armó la serpentina queda intacto.
  */
-function refine(teams: Player[][], threshold: number, maxIterations: number): number {
+function refine(
+  teams: Player[][],
+  threshold: number,
+  maxIterations: number,
+  levelOf: LevelOf,
+): number {
   let swaps = 0;
   if (teams.length < 2) return swaps;
 
   for (let iteration = 0; iteration < maxIterations; iteration++) {
-    const totals = teams.map(teamTotal);
+    const totals = teams.map((team) => teamTotal(team, levelOf));
     let strongest = 0;
     let weakest = 0;
     totals.forEach((total, i) => {
@@ -214,7 +238,7 @@ function refine(teams: Player[][], threshold: number, maxIterations: number): nu
     teams[strongest].forEach((strong, fromIndex) => {
       teams[weakest].forEach((weak, toIndex) => {
         if (strong.position !== weak.position) return;
-        const gain = strong.level - weak.level;
+        const gain = levelOf(strong) - levelOf(weak);
         if (gain <= 0) return;
         // Mover `gain` puntos de un equipo al otro achica la brecha en 2·gain.
         const nextDiff = Math.abs(diff - 2 * gain);

@@ -2,12 +2,15 @@ import { balanceTeams } from "./balance";
 import { defaultFormation, getFormation } from "./formations";
 import { kitFor, teamNameFor } from "./kits";
 import { createId, createPlayer, parseNames } from "./players";
+import { computeRatings, effectiveLevel } from "./rating";
 import {
   DEFAULT_SETUP,
   loadMatch,
+  loadResults,
   loadSetup,
   loadSquad,
   saveMatch,
+  saveResults,
   saveSetup,
   saveSquad,
   type MatchSetup,
@@ -15,8 +18,10 @@ import {
 import {
   MATCH_FORMATS,
   type Match,
+  type MatchResult,
   type PitchSpot,
   type Player,
+  type PlayerRating,
   type Team,
 } from "./types";
 
@@ -32,7 +37,7 @@ import {
 /** Destino de un movimiento manual: un equipo por id, o el banco. */
 export const BENCH_ID = "bench";
 
-export type Step = 1 | 2 | 3;
+export type Step = 1 | 2 | 3 | 4;
 
 export interface ArmadorState {
   squad: Player[];
@@ -40,6 +45,14 @@ export interface ArmadorState {
   match: Match | null;
   bench: Player[];
   step: Step;
+  /** Historial de partidos jugados: el insumo del rating. */
+  results: MatchResult[];
+  /**
+   * Rating derivado del historial. No se persiste: se recalcula entero cada
+   * vez que cambia el plantel o el historial, que es barato y evita que quede
+   * desincronizado.
+   */
+  ratings: Map<string, PlayerRating>;
 }
 
 const EMPTY: ArmadorState = {
@@ -48,17 +61,23 @@ const EMPTY: ArmadorState = {
   match: null,
   bench: [],
   step: 1,
+  results: [],
+  ratings: new Map(),
 };
 
 function hydrate(): ArmadorState {
   const stored = loadMatch();
+  const squad = loadSquad();
+  const results = loadResults();
   return {
-    squad: loadSquad(),
+    squad,
     setup: loadSetup(),
     match: stored?.match ?? null,
     bench: stored?.bench ?? [],
     // Si había un partido armado, arrancamos donde el usuario lo dejó.
     step: stored ? 2 : 1,
+    results,
+    ratings: computeRatings(squad, results),
   };
 }
 
@@ -91,6 +110,7 @@ function commit(next: ArmadorState): void {
 
   if (next.squad !== previous.squad) saveSquad(next.squad);
   if (next.setup !== previous.setup) saveSetup(next.setup);
+  if (next.results !== previous.results) saveResults(next.results);
   if (next.match !== previous.match || next.bench !== previous.bench) {
     saveMatch(next.match ? { match: next.match, bench: next.bench } : null);
   }
@@ -99,7 +119,14 @@ function commit(next: ArmadorState): void {
 }
 
 function update(patch: Partial<ArmadorState>): void {
-  commit({ ...state, ...patch });
+  const next = { ...state, ...patch };
+  // El rating es función pura del plantel y del historial: si cambió alguno de
+  // los dos, se recalcula desde cero. Con ~20 jugadores y ~100 fechas es menos
+  // de un milisegundo, y a cambio nunca puede quedar desfasado.
+  if (next.squad !== state.squad || next.results !== state.results) {
+    next.ratings = computeRatings(next.squad, next.results);
+  }
+  commit(next);
 }
 
 // ── Utilidades internas ────────────────────────────────────────────────────
@@ -202,14 +229,22 @@ export function clearSquad(): void {
   update({ squad: [], match: null, bench: [], step: 1 });
 }
 
+/** Nivel que ve el balanceador: el aprendido del historial. */
+export function levelOf(player: Player): number {
+  return effectiveLevel(player, state.ratings);
+}
+
 export function generate(): void {
-  const { squad, setup, match } = state;
+  const { squad, setup, match, ratings } = state;
   const format = MATCH_FORMATS.find((f) => f.id === setup.formatId);
 
   const result = balanceTeams(squad, {
     teamCount: setup.teamCount,
     perTeam: format?.perTeam ?? null,
     seed: randomSeed(),
+    // Continuo y aprendido, no el entero 1-5: distingue entre dos "nivel 4"
+    // que no son iguales, y eso ya deja los equipos más parejos.
+    levelOf: (player) => effectiveLevel(player, ratings),
   });
 
   const teams: Team[] = result.teams.map((players, index) => {
@@ -365,6 +400,66 @@ export function setFormation(teamId: string, formation: string): void {
       ),
     },
   });
+}
+
+// ── Resultados y aprendizaje ───────────────────────────────────────────────
+
+export interface ResultInput {
+  /** Goles por id de equipo. */
+  goals: Record<string, number>;
+  best?: string;
+  worst?: string;
+}
+
+export interface SavedResult {
+  result: MatchResult;
+  /** Rating de cada jugador antes y después de sumar esta fecha. */
+  before: Map<string, PlayerRating>;
+  after: Map<string, PlayerRating>;
+}
+
+/**
+ * Cierra el partido en curso: guarda el resultado en el historial (lo que
+ * dispara el recálculo del rating) y deja los equipos limpios para la próxima
+ * fecha. El plantel no se toca.
+ *
+ * Devuelve el antes y el después del rating porque quien llama todavía tiene
+ * en la mano el estado del render anterior y no puede ver el recalculado.
+ */
+export function saveResult(input: ResultInput): SavedResult | null {
+  const { match, results } = state;
+  if (!match) return null;
+
+  const teams = match.teams
+    .filter((team) => team.players.length > 0)
+    .map((team) => ({
+      id: team.id,
+      name: team.name,
+      playerIds: team.players.map((p) => p.id),
+      goals: Math.max(0, Math.round(Number(input.goals[team.id]) || 0)),
+    }));
+
+  if (teams.length < 2) return null;
+
+  const played = new Set(teams.flatMap((t) => t.playerIds));
+  const result: MatchResult = {
+    id: createId("r"),
+    date: match.date,
+    format: match.format,
+    teams,
+    // Solo valen los destacados que efectivamente jugaron.
+    best: input.best && played.has(input.best) ? input.best : undefined,
+    worst: input.worst && played.has(input.worst) ? input.worst : undefined,
+  };
+
+  const before = state.ratings;
+  update({ results: [...results, result], match: null, bench: [], step: 1 });
+  return { result, before, after: state.ratings };
+}
+
+/** Borra una fecha del historial. El rating se recalcula sin ella. */
+export function deleteResult(resultId: string): void {
+  update({ results: state.results.filter((r) => r.id !== resultId) });
 }
 
 export function updateTeam(teamId: string, patch: Partial<Omit<Team, "id">>): void {

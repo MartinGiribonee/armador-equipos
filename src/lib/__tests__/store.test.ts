@@ -364,3 +364,117 @@ describe("store — ubicación manual en la cancha", () => {
     expect(reloaded.getSnapshot().match!.teams[0].layout).toBeUndefined();
   });
 });
+
+describe("store — resultados y aprendizaje", () => {
+  let store: Store;
+
+  beforeEach(async () => {
+    store = await freshStore();
+    seed(store);
+    store.setSetup({ teamCount: 2, formatId: "5v5", mode: "auto" });
+    store.generate();
+  });
+
+  /** Carga un resultado sobre el partido en curso. */
+  function cargar(golesA: number, golesB: number, extra: { best?: string; worst?: string } = {}) {
+    const match = store.getSnapshot().match!;
+    return store.saveResult({
+      goals: { [match.teams[0].id]: golesA, [match.teams[1].id]: golesB },
+      ...extra,
+    });
+  }
+
+  it("guardar el resultado suma la fecha y libera los equipos", () => {
+    const guardado = cargar(5, 2);
+
+    expect(guardado).not.toBeNull();
+    expect(store.getSnapshot().results).toHaveLength(1);
+    expect(store.getSnapshot().match).toBeNull();
+    expect(store.getSnapshot().bench).toHaveLength(0);
+    // El plantel queda intacto para la próxima fecha.
+    expect(store.getSnapshot().squad).toHaveLength(10);
+  });
+
+  it("los ganadores suben de nivel y los perdedores bajan", () => {
+    const antes = store.getSnapshot().match!;
+    const ganador = antes.teams[0].players[0].id;
+    const perdedor = antes.teams[1].players[0].id;
+
+    cargar(6, 1);
+
+    const ratings = store.getSnapshot().ratings;
+    expect(ratings.get(ganador)!.rating).toBeGreaterThan(1500);
+    expect(ratings.get(perdedor)!.rating).toBeLessThan(1500);
+    expect(ratings.get(ganador)!.matches).toBe(1);
+  });
+
+  it("solo acepta destacados que hayan jugado", () => {
+    const match = store.getSnapshot().match!;
+    const jugo = match.teams[0].players[0].id;
+
+    const guardado = cargar(3, 2, { best: jugo, worst: "no-existe" });
+
+    expect(guardado!.result.best).toBe(jugo);
+    expect(guardado!.result.worst).toBeUndefined();
+  });
+
+  it("devuelve el antes y el después del rating", () => {
+    const jugador = store.getSnapshot().match!.teams[0].players[0].id;
+    const guardado = cargar(7, 0)!;
+
+    expect(guardado.before.get(jugador)!.rating).toBe(1500);
+    expect(guardado.after.get(jugador)!.rating).toBeGreaterThan(1500);
+  });
+
+  it("el historial y el rating sobreviven al recargar la app", async () => {
+    const jugador = store.getSnapshot().match!.teams[0].players[0].id;
+    cargar(6, 1);
+    const esperado = store.getSnapshot().ratings.get(jugador)!.rating;
+
+    vi.resetModules();
+    const reloaded = await import("../store");
+
+    expect(reloaded.getSnapshot().results).toHaveLength(1);
+    expect(reloaded.getSnapshot().ratings.get(jugador)!.rating).toBeCloseTo(esperado, 9);
+  });
+
+  it("borrar una fecha recalcula el rating sin ella", () => {
+    const jugador = store.getSnapshot().match!.teams[0].players[0].id;
+    const guardado = cargar(8, 0)!;
+    expect(store.getSnapshot().ratings.get(jugador)!.rating).toBeGreaterThan(1500);
+
+    store.deleteResult(guardado.result.id);
+
+    expect(store.getSnapshot().results).toHaveLength(0);
+    expect(store.getSnapshot().ratings.get(jugador)!.rating).toBe(1500);
+    expect(store.getSnapshot().ratings.get(jugador)!.matches).toBe(0);
+  });
+
+  it("borrar a un jugador del plantel recalcula el rating del resto", () => {
+    cargar(6, 1);
+    const antes = store.getSnapshot().ratings.size;
+
+    store.removePlayer(store.getSnapshot().squad[0].id);
+
+    expect(store.getSnapshot().ratings.size).toBe(antes - 1);
+    // El historial no se toca: el resultado sigue guardado tal cual.
+    expect(store.getSnapshot().results).toHaveLength(1);
+  });
+
+  it("el balanceador usa el nivel aprendido, no el cargado a mano", () => {
+    const jugador = store.getSnapshot().squad[0];
+    expect(store.levelOf(jugador)).toBe(3);
+
+    cargar(9, 0);
+
+    const despues = store.levelOf(jugador);
+    // Jugó, así que su nivel efectivo ya no es el entero que cargó el usuario.
+    expect(despues).not.toBe(3);
+    expect(Number.isInteger(despues)).toBe(false);
+  });
+
+  it("sin partido abierto no se puede guardar un resultado", () => {
+    cargar(3, 3);
+    expect(store.saveResult({ goals: {} })).toBeNull();
+  });
+});

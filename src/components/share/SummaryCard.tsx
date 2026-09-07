@@ -1,5 +1,5 @@
 import { Jersey } from "@/components/pitch/Jersey";
-import { teamAverage } from "@/lib/balance";
+import { teamAverage, type LevelOf } from "@/lib/balance";
 import { sortByLine } from "@/lib/players";
 import { formatDate, formatLabel } from "@/lib/share";
 import type { Match, Player } from "@/lib/types";
@@ -7,6 +7,7 @@ import type { Match, Player } from "@/lib/types";
 interface SummaryCardProps {
   match: Match;
   bench: Player[];
+  levelOf?: LevelOf;
 }
 
 /**
@@ -15,7 +16,7 @@ interface SummaryCardProps {
  * variables CSS ni transparencias) porque `html-to-image` clona el nodo fuera
  * del árbol y algunos estilos heredados no viajan.
  */
-export function SummaryCard({ match, bench }: SummaryCardProps) {
+export function SummaryCard({ match, bench, levelOf }: SummaryCardProps) {
   const columns = match.teams.length >= 3 ? 3 : match.teams.length;
 
   return (
@@ -115,7 +116,7 @@ export function SummaryCard({ match, bench }: SummaryCardProps) {
                 color: "#86efac",
               }}
             >
-              Nivel promedio {teamAverage(team.players).toFixed(1)}
+              Nivel promedio {teamAverage(team.players, levelOf).toFixed(1)}
             </div>
           </div>
         ))}

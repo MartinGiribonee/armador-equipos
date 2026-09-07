@@ -1,4 +1,4 @@
-import { teamAverage } from "./balance";
+import { teamAverage, type LevelOf } from "./balance";
 import { sortByLine } from "./players";
 import { MATCH_FORMATS, type Match, type Player } from "./types";
 
@@ -21,7 +21,11 @@ export function formatLabel(formatId: string): string {
  * Texto plano de los equipos, pensado para pegar directo en el grupo de
  * WhatsApp. Sin markdown ni tablas: emoji, nombres y poco más.
  */
-export function matchToText(match: Match, bench: readonly Player[] = []): string {
+export function matchToText(
+  match: Match,
+  bench: readonly Player[] = [],
+  levelOf?: LevelOf,
+): string {
   const lines: string[] = [];
   lines.push(`⚽ ${formatLabel(match.format)} · ${formatDate(match.date)}`);
 
@@ -31,7 +35,7 @@ export function matchToText(match: Match, bench: readonly Player[] = []): string
     for (const player of sortByLine(team.players)) {
       lines.push(`• ${player.name}`);
     }
-    lines.push(`Nivel promedio: ${teamAverage(team.players).toFixed(1)}`);
+    lines.push(`Nivel promedio: ${teamAverage(team.players, levelOf).toFixed(1)}`);
   }
 
   if (bench.length > 0) {

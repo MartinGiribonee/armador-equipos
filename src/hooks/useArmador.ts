@@ -39,6 +39,8 @@ export function useArmador() {
     setup: state.setup,
     match: state.match,
     bench: state.bench,
+    results: state.results,
+    ratings: state.ratings,
     positionTally,
     canGenerate: state.squad.length >= 2 && state.setup.teamCount >= 2,
     setStep: store.setStep,
@@ -55,6 +57,9 @@ export function useArmador() {
     setFormation: store.setFormation,
     setPlayerSpot: store.setPlayerSpot,
     resetLayout: store.resetLayout,
+    saveResult: store.saveResult,
+    deleteResult: store.deleteResult,
+    levelOf: store.levelOf,
   };
 }
 

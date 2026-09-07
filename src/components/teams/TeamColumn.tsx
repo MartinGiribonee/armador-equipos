@@ -3,7 +3,7 @@
 import { useDroppable } from "@dnd-kit/core";
 import { useState } from "react";
 import { PlayerChip } from "@/components/teams/PlayerChip";
-import { positionCount, teamAverage, teamTotal } from "@/lib/balance";
+import { positionCount, teamAverage, teamTotal, type LevelOf } from "@/lib/balance";
 import { sortByLine } from "@/lib/players";
 import { POSITIONS, type Player } from "@/lib/types";
 
@@ -19,6 +19,8 @@ interface TeamColumnProps {
   onDropSelected: () => void;
   onRename?: (name: string) => void;
   tone?: "team" | "bench";
+  /** Nivel a mostrar: el aprendido del historial. */
+  levelOf?: LevelOf;
 }
 
 export function TeamColumn({
@@ -32,6 +34,7 @@ export function TeamColumn({
   onDropSelected,
   onRename,
   tone = "team",
+  levelOf,
 }: TeamColumnProps) {
   const { setNodeRef, isOver } = useDroppable({
     id: `container:${id}`,
@@ -96,8 +99,14 @@ export function TeamColumn({
       {tone === "team" && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-grass-100/50">
           <span>
-            Nivel <strong className="text-grass-200">{teamTotal(players)}</strong> · prom{" "}
-            <strong className="text-grass-200">{teamAverage(players).toFixed(1)}</strong>
+            Nivel{" "}
+            <strong className="text-grass-200">
+              {teamTotal(players, levelOf).toFixed(1)}
+            </strong>{" "}
+            · prom{" "}
+            <strong className="text-grass-200">
+              {teamAverage(players, levelOf).toFixed(1)}
+            </strong>
           </span>
           <span className="flex gap-1.5">
             {POSITIONS.filter((p) => counts[p] > 0).map((p) => (

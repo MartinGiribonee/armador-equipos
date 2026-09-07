@@ -68,6 +68,44 @@ export interface Match {
   teams: Team[];
 }
 
+/**
+ * Resultado de un partido ya jugado. Es el insumo del sistema de rating: se
+ * guarda el historial completo y los niveles se recalculan siempre desde cero
+ * sobre él, así se puede corregir un resultado mal cargado o cambiar la
+ * fórmula y volver a correrla sobre todas las fechas pasadas.
+ */
+export interface MatchResult {
+  id: string;
+  /** ISO date (YYYY-MM-DD). Ordena el historial. */
+  date: string;
+  format: string;
+  teams: Array<{
+    /** Id del equipo tal como estaba armado ese día. */
+    id: string;
+    name: string;
+    playerIds: string[];
+    goals: number;
+  }>;
+  /** Figura y flojo del partido: un empujón extra sobre el ajuste del equipo. */
+  best?: string;
+  worst?: string;
+}
+
+/** Estado aprendido de un jugador, derivado del historial de resultados. */
+export interface PlayerRating {
+  playerId: string;
+  /** Escala tipo Elo. Ver `SEED_BASE` y `SEED_STEP` en `rating.ts`. */
+  rating: number;
+  /** El mismo rating traducido a la escala 1-5, con decimales. */
+  level: number;
+  matches: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  goalsFor: number;
+  goalsAgainst: number;
+}
+
 /** Formatos de partido soportados. `null` en `perTeam` = reparto libre. */
 export interface MatchFormat {
   id: string;

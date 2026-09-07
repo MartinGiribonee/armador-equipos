@@ -1,6 +1,7 @@
 import { clampLevel } from "./players";
 import {
   MATCH_FORMATS,
+  type MatchResult,
   POSITIONS,
   type Match,
   type PitchSpot,
@@ -20,6 +21,7 @@ import {
 const SQUAD_KEY = "armador:squad:v1";
 const MATCH_KEY = "armador:match:v1";
 const SETUP_KEY = "armador:setup:v1";
+const RESULTS_KEY = "armador:results:v1";
 
 /** Cómo se arman los equipos: repartiendo con el algoritmo o a dedo. */
 export type BuildMode = "auto" | "manual";
@@ -158,4 +160,54 @@ export function loadSetup(): MatchSetup {
 
 export function saveSetup(setup: MatchSetup): void {
   write(SETUP_KEY, setup);
+}
+
+/**
+ * Valida un resultado leído del storage. Un partido sin dos equipos con
+ * jugadores no aporta nada al rating, así que se descarta directamente.
+ */
+function parseResult(value: unknown): MatchResult | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Record<string, unknown>;
+  if (typeof raw.id !== "string" || typeof raw.date !== "string") return null;
+  if (!Array.isArray(raw.teams)) return null;
+
+  const teams = raw.teams
+    .map((team) => {
+      if (!team || typeof team !== "object") return null;
+      const t = team as Record<string, unknown>;
+      const playerIds = Array.isArray(t.playerIds)
+        ? t.playerIds.filter((id): id is string => typeof id === "string")
+        : [];
+      const goals = Number(t.goals);
+      if (playerIds.length === 0 || !Number.isFinite(goals) || goals < 0) return null;
+      return {
+        id: typeof t.id === "string" ? t.id : "",
+        name: typeof t.name === "string" ? t.name : "Equipo",
+        playerIds,
+        goals: Math.round(goals),
+      };
+    })
+    .filter((t): t is MatchResult["teams"][number] => t !== null);
+
+  if (teams.length < 2) return null;
+
+  return {
+    id: raw.id,
+    date: raw.date,
+    format: typeof raw.format === "string" ? raw.format : "libre",
+    teams,
+    best: typeof raw.best === "string" ? raw.best : undefined,
+    worst: typeof raw.worst === "string" ? raw.worst : undefined,
+  };
+}
+
+export function loadResults(): MatchResult[] {
+  const raw = read<unknown[]>(RESULTS_KEY);
+  if (!Array.isArray(raw)) return [];
+  return raw.map(parseResult).filter((r): r is MatchResult => r !== null);
+}
+
+export function saveResults(results: readonly MatchResult[]): void {
+  write(RESULTS_KEY, results);
 }

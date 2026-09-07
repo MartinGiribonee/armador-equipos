@@ -22,7 +22,7 @@ npm run dev      # http://localhost:3000
 
 ## El flujo
 
-Tres pasos, pensados para hacerse desde el celular:
+Cuatro pasos, pensados para hacerse desde el celular:
 
 1. **Plantel** — pegás los nombres (acepta el copy-paste crudo de WhatsApp, con
    numeración y viñetas) y le ponés a cada uno nivel 1-5 y puesto. Arrancan
@@ -40,6 +40,9 @@ Tres pasos, pensados para hacerse desde el celular:
    quieras, más allá de la formación; "Volver a la formación" descarta esos
    ajustes. De ahí sale el PNG de la alineación, el PNG con las listas, el
    texto plano y el link de WhatsApp.
+4. **Resultado** — cuando terminó el partido, cargás el marcador y (opcional,
+   pero muy recomendado) la figura y el flojo de la fecha. Eso alimenta el
+   sistema de rating y deja los equipos libres para el próximo partido.
 
 ## Cómo reparte
 
@@ -61,6 +64,45 @@ simplemente correrla con otra semilla.
 
 En modo manual el algoritmo no corre: se crean los equipos vacíos y el reparto
 sale de los movimientos del usuario.
+
+## Cómo aprende
+
+`src/lib/rating.ts`. Cada jugador tiene un rating tipo Elo que arranca en el
+nivel 1-5 cargado a mano y se corrige con cada fecha del historial.
+
+**Elo por equipos.** El rating del equipo es el promedio de sus jugadores, y el
+ajuste no depende de si ganaste sino de **cuánto se desvió el resultado de lo
+esperado**: ganarle al equipo flojo casi no suma, dar el batacazo suma el doble.
+Se usa la diferencia de goles, no solo quién ganó. El K arranca alto y baja con
+los partidos jugados, así un novato encuentra su lugar rápido y a un veterano no
+lo desbarata un mal domingo.
+
+Que la app rearme los equipos cada semana es lo que hace que esto funcione: si
+alguien jugara siempre con los mismos, su rating quedaría confundido con el de
+sus compañeros.
+
+**La figura y el flojo importan más de lo que parece.** Sobre partidos simulados
+(ver `rating.test.ts`), con equipos armados por el propio balanceador:
+
+| Señal cargada | Error medio a las 50 fechas |
+| --- | --- |
+| Solo el marcador | 0.78 puntos — prácticamente no aprende |
+| Marcador + figura/flojo | ~0.25 puntos |
+
+La razón: cuando el balanceador hace bien su trabajo los equipos quedan parejos
+y el marcador pasa a ser casi azar. La marca de figura/flojo es la única señal
+*individual*, sin diluir entre 8 jugadores. **Si no se marca a nadie, el sistema
+casi no aprende.**
+
+**El nivel manual no se descarta**: es la semilla. El nivel que se muestra es una
+mezcla entre esa semilla y lo aprendido, pesada por partidos jugados (con 0
+fechas se ve lo cargado, con 4 va mitad y mitad, con 20 manda el historial). Y
+como el rating se **recalcula entero desde el historial**, corregir el nivel a
+mano corre toda la curva del jugador, y borrar una fecha mal cargada deshace su
+efecto.
+
+El balanceador usa este nivel continuo en vez del entero 1-5, lo que ya de por sí
+deja los equipos más parejos: distingue entre dos "nivel 4" que no son iguales.
 
 ## Ubicaciones en la cancha
 
@@ -89,10 +131,12 @@ src/
     formations.ts       formaciones y coordenadas en la cancha
     players.ts          parseo de la lista pegada, orden, nombres cortos
     kits.ts             juegos de camiseta y contraste del dorsal
+    rating.ts           ← el aprendizaje (Elo por equipos)
     store.ts            estado + acciones (fuera de React)
     storage.ts          lectura/escritura de localStorage
     share.ts            texto plano, link de WhatsApp, descarga del PNG
-    __tests__/          57 tests: algoritmo, parseo y store
+    __tests__/          88 tests, incluida una simulación de 50 fechas
+                        que verifica que el rating converge
 ```
 
 El estado vive en `src/lib/store.ts`, fuera de React, y se consume con
@@ -101,8 +145,8 @@ para persistir.
 
 ## Migrar a una base (fase 2)
 
-`Player`, `Team` y `Match` son objetos planos y serializables que mapean 1:1 a
-tablas. La lectura y escritura está toda en `storage.ts`, y las acciones de
+`Player`, `Team`, `Match` y `MatchResult` son objetos planos y serializables
+que mapean 1:1 a tablas. La lectura y escritura está toda en `storage.ts`, y las acciones de
 negocio en `store.ts`: para pasar a Supabase o Firebase se reemplaza
 `storage.ts` y se hacen `async` las acciones del store. Ni el algoritmo ni los
 componentes se tocan.

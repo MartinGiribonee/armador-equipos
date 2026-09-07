@@ -6,6 +6,7 @@ const STEPS: Array<{ id: Step; label: string; short: string }> = [
   { id: 1, label: "Plantel", short: "Plantel" },
   { id: 2, label: "Equipos", short: "Equipos" },
   { id: 3, label: "Cancha", short: "Cancha" },
+  { id: 4, label: "Resultado", short: "Resultado" },
 ];
 
 interface StepperProps {
@@ -17,21 +18,21 @@ interface StepperProps {
 
 export function Stepper({ current, maxStep, onSelect }: StepperProps) {
   return (
-    <nav aria-label="Pasos" className="flex items-center gap-1.5">
+    <nav aria-label="Pasos" className="flex items-center gap-1">
       {STEPS.map((step, index) => {
         const enabled = step.id <= maxStep;
         const active = step.id === current;
         const done = step.id < current;
 
         return (
-          <div key={step.id} className="flex flex-1 items-center gap-1.5">
+          <div key={step.id} className="flex flex-1 items-center gap-1">
             <button
               type="button"
               disabled={!enabled}
               aria-current={active ? "step" : undefined}
               onClick={() => onSelect(step.id)}
               className={[
-                "flex flex-1 items-center justify-center gap-2 rounded-xl px-2 py-2 text-sm font-semibold transition",
+                "flex flex-1 items-center justify-center gap-1.5 rounded-xl px-1.5 py-2 text-xs font-semibold transition sm:gap-2 sm:px-2 sm:text-sm",
                 active
                   ? "bg-grass-500 text-grass-950 shadow-lg shadow-grass-500/25"
                   : enabled

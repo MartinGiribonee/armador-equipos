@@ -3,15 +3,17 @@
 import { useState } from "react";
 import { LevelPicker } from "@/components/ui/LevelPicker";
 import { PositionPicker } from "@/components/ui/PositionPicker";
-import type { Player, Position } from "@/lib/types";
+import type { Player, PlayerRating, Position } from "@/lib/types";
 
 interface PlayerRowProps {
   player: Player;
+  /** Lo que la app aprendió de este jugador, si ya jugó alguna fecha. */
+  rating?: PlayerRating;
   onChange: (patch: Partial<Omit<Player, "id">>) => void;
   onRemove: () => void;
 }
 
-export function PlayerRow({ player, onChange, onRemove }: PlayerRowProps) {
+export function PlayerRow({ player, rating, onChange, onRemove }: PlayerRowProps) {
   const [name, setName] = useState(player.name);
 
   // El input es un borrador local, pero si el nombre cambia desde afuera (se
@@ -61,12 +63,27 @@ export function PlayerRow({ player, onChange, onRemove }: PlayerRowProps) {
           value={player.position}
           onChange={(position: Position) => onChange({ position })}
         />
-        <LevelPicker
-          value={player.level}
-          size="sm"
-          label={`Nivel de ${player.name}`}
-          onChange={(level) => onChange({ level })}
-        />
+        <div className="flex items-center gap-2">
+          {rating && rating.matches > 0 && (
+            <span
+              title={`Nivel aprendido en ${rating.matches} partido${
+                rating.matches === 1 ? "" : "s"
+              }: ${rating.wins}G ${rating.draws}E ${rating.losses}P`}
+              className="rounded-md bg-white/5 px-1.5 py-0.5 text-[10px] font-bold text-grass-300"
+            >
+              {rating.level.toFixed(1)}
+              <span className="ml-1 font-medium text-grass-100/40">
+                {rating.matches}p
+              </span>
+            </span>
+          )}
+          <LevelPicker
+            value={player.level}
+            size="sm"
+            label={`Nivel de ${player.name}`}
+            onChange={(level) => onChange({ level })}
+          />
+        </div>
       </div>
     </li>
   );

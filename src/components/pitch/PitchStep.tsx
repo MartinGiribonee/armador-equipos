@@ -31,6 +31,7 @@ export function PitchStep({ armador }: { armador: Armador }) {
     setFormation,
     setPlayerSpot,
     resetLayout,
+    levelOf,
     setStep,
   } = armador;
   const [activeIndex, setActiveIndex] = useState(0);
@@ -93,7 +94,7 @@ export function PitchStep({ armador }: { armador: Armador }) {
   const team = match.teams[Math.min(activeIndex, match.teams.length - 1)];
   const formations = formationsFor(team.players.length);
   const hasCustomLayout = Object.keys(team.layout ?? {}).length > 0;
-  const text = matchToText(match, bench);
+  const text = matchToText(match, bench, levelOf);
 
   return (
     <div className="flex flex-col gap-4">
@@ -171,7 +172,7 @@ export function PitchStep({ armador }: { armador: Armador }) {
             </span>
             <span className="text-[11px] text-grass-100/60">
               {formatLabel(match.format)} · {team.players.length} jugadores · nivel{" "}
-              {teamAverage(team.players).toFixed(1)}
+              {teamAverage(team.players, levelOf).toFixed(1)}
             </span>
           </div>
           <Pitch
@@ -292,6 +293,15 @@ export function PitchStep({ armador }: { armador: Armador }) {
         </p>
       </div>
 
+      {/* Cierre del ciclo: se juega y se vuelve acá a cargar cómo salió. */}
+      <button
+        type="button"
+        onClick={() => setStep(4)}
+        className="rounded-xl border border-grass-500/40 bg-grass-500/10 px-4 py-3 text-sm font-bold text-grass-200 transition hover:bg-grass-500/20"
+      >
+        🏁 Ya se jugó — cargar el resultado
+      </button>
+
       {toast && (
         <div
           role="status"
@@ -320,7 +330,7 @@ export function PitchStep({ armador }: { armador: Armador }) {
         }}
       >
         <div ref={summaryRef}>
-          <SummaryCard match={match} bench={bench} />
+          <SummaryCard match={match} bench={bench} levelOf={levelOf} />
         </div>
       </div>
     </div>

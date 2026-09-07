@@ -2,6 +2,7 @@
 
 import { PitchStep } from "@/components/pitch/PitchStep";
 import { SquadStep } from "@/components/players/SquadStep";
+import { ResultStep } from "@/components/result/ResultStep";
 import { TeamsStep } from "@/components/teams/TeamsStep";
 import { Stepper } from "@/components/ui/Stepper";
 import { useArmador, type Step } from "@/hooks/useArmador";
@@ -11,7 +12,7 @@ export default function Home() {
   const { hydrated, step, setStep, squad, match, canGenerate } = armador;
 
   // No se puede saltar a un paso para el que todavía no hay datos.
-  const maxStep: Step = match ? 3 : squad.length >= 2 ? 2 : 1;
+  const maxStep: Step = match ? 4 : squad.length >= 2 ? 2 : 1;
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-4 px-3 pt-4 pb-24 sm:px-5">
@@ -36,6 +37,7 @@ export default function Home() {
           {step === 1 && <SquadStep armador={armador} />}
           {step === 2 && <TeamsStep armador={armador} />}
           {step === 3 && <PitchStep armador={armador} />}
+          {step === 4 && <ResultStep armador={armador} />}
         </>
       )}
 

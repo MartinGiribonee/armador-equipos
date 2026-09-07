@@ -35,6 +35,7 @@ export function TeamsStep({ armador }: { armador: Armador }) {
     generate,
     createEmptyTeams,
     resetMatch,
+    levelOf,
     movePlayer,
     updateTeam,
     setStep,
@@ -57,8 +58,8 @@ export function TeamsStep({ armador }: { armador: Armador }) {
   );
 
   const spread = match
-    ? Math.max(...match.teams.map((t) => teamTotal(t.players))) -
-      Math.min(...match.teams.map((t) => teamTotal(t.players)))
+    ? Math.max(...match.teams.map((t) => teamTotal(t.players, levelOf))) -
+      Math.min(...match.teams.map((t) => teamTotal(t.players, levelOf)))
     : 0;
 
   const needed = setup.teamCount * (capacity ?? 0);
@@ -215,7 +216,7 @@ export function TeamsStep({ armador }: { armador: Armador }) {
             <span className="text-grass-100/60">
               Diferencia de nivel entre el más fuerte y el más débil:{" "}
               <strong className={spread <= 2 ? "text-grass-300" : "text-amber-300"}>
-                {spread} punto{spread === 1 ? "" : "s"}
+                {spread.toFixed(1)} punto{spread === 1 ? "" : "s"}
               </strong>
             </span>
             <span className="text-grass-100/40">
@@ -252,6 +253,7 @@ export function TeamsStep({ armador }: { armador: Armador }) {
                   }
                   onDropSelected={() => moveSelectedTo(team.id)}
                   onRename={(name) => updateTeam(team.id, { name })}
+                  levelOf={levelOf}
                 />
               ))}
 

@@ -17,7 +17,7 @@ const SORTS: Array<{ id: SortMode; label: string }> = [
 ];
 
 export function SquadStep({ armador }: { armador: Armador }) {
-  const { squad, positionTally, addNames, updatePlayer, removePlayer, clearSquad } =
+  const { squad, ratings, positionTally, addNames, updatePlayer, removePlayer, clearSquad } =
     armador;
   const [sort, setSort] = useState<SortMode>("orden");
   const [confirmClear, setConfirmClear] = useState(false);
@@ -134,6 +134,7 @@ export function SquadStep({ armador }: { armador: Armador }) {
               <PlayerRow
                 key={player.id}
                 player={player}
+                rating={ratings.get(player.id)}
                 onChange={(patch) => updatePlayer(player.id, patch)}
                 onRemove={() => removePlayer(player.id)}
               />
